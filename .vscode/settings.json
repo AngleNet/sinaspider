@@ -1,0 +1,16 @@
+{
+    "python.unitTest.pyTestArgs": [
+        ".",
+        "-vv",
+        "--tb=native"
+    ],
+    "python.unitTest.pyTestEnabled": true,
+    "python.unitTest.nosetestsEnabled": false,
+    "python.pythonPath": "${workspaceRoot}\\.env\\Scripts\\python.exe",
+    "spellright.language": "en",
+    "spellright.documentTypes": [
+        "markdown",
+        "latex",
+        "plaintext"
+    ]
+}
