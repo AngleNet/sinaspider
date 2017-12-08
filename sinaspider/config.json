@@ -1,14 +1,21 @@
 {
     "LOGGER":{
-        "level": "logging.DEBUG",
+        "level": "DEBUG",
         "format": "[%(levelname)s]: %(asctime)s: %(filename)s:%(lineno)d %(message)s",
         "datefmt": "%m-%d %H:%M:%S",
         "backup_window": 7
     },
     "TEST":{
         "_comment": "Unit testing configures",
-        "test_dummy1": 1,
-        "test_dummy2": "test_dummy2",
-        "test_dummy3": [1, 2, 3]
+        "log_dir": "logs",
+        "config":{
+            "test_dummy1": 1,
+            "test_dummy2": "test_dummy2",
+            "test_dummy3": [1, 2, 3]
+        },
+        "scheduler_service":{
+            "addr": "127.0.0.1",
+            "port": 8000
+        }
     }
 }

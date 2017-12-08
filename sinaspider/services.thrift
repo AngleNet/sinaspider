@@ -3,7 +3,7 @@ namespace py services
 
 typedef i32 Integer
 
-enum ret_status{
+enum RetStatus{
     SUCCESS = 0,
     FAILED = 1
 }
@@ -28,16 +28,16 @@ struct ProxyAddress{
 /**
  * A scheduler service.
  */
-service SchedulerService{
+service scheduler_service{
     /**
      * Register the downloader along with the name.
      */
-    ret_status register_downloader(1: required string name),
+    RetStatus register_downloader(1: required string name),
 
     /**
      * Unregister the named downloader.
      */
-    ret_status unregister_downloader(1: required string name),
+    RetStatus unregister_downloader(1: required string name),
 
     /**
      * Get a pair of user name and password. For now, each pair of user name and 
@@ -48,7 +48,7 @@ service SchedulerService{
     /**
      * Give up the user identity.
      */
-    ret_status resign_user_identity(1: required UserIdentity pair),
+    RetStatus resign_user_identity(1: required UserIdentity pair),
 
     /**
      * Grab a batch of links.
@@ -58,7 +58,7 @@ service SchedulerService{
     /**
      * Submit a batch of links.
      */
-    ret_status submit_links(1: required list<string> links),
+    RetStatus submit_links(1: required list<string> links),
 
     /**
      * Request a living proxy.
@@ -74,5 +74,10 @@ service SchedulerService{
     /**
      * Submit a batch of proxies to scheduler.
      */
-    ret_status submit_proxies(1: required list<ProxyAddress> addrs)
+    RetStatus submit_proxies(1: required list<ProxyAddress> addrs),
+
+    /**
+     * Kill the service. Testing only.
+     */
+    RetStatus _kill_service()
 }

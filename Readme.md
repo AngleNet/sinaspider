@@ -22,3 +22,6 @@ A simple weibo spider which collects trending post messages.
 
     1. using `pipreqs`: `pipreqs /home/project/location`
     2. using `pip freeze`
+* Thrift 
+
+    `thrift --out . --gen py:newstyle services.thrift`

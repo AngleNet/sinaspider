@@ -4,7 +4,7 @@ A multithread downloader.
 
 import threading
 
-from config import CONFIG
+from sinaspider.config import CONFIG
 
 class Downloader(object):
     """

@@ -2,11 +2,15 @@
 A logger initializer.
 """
 
+import datetime
 import logging
 import logging.handlers
 import os
 
-from config import CONFIG
+from sinaspider.config import CONFIG
+
+def _getLevel(name):
+    return logging._nameToLevel.get(name, 'INFO')
 
 _COLOR_RESET = '\033[1;0m'
 _COLOR_RED = '\033[1;31m'
@@ -41,7 +45,7 @@ class ColoredFormatter(logging.Formatter):
         return _COLORERD_LOG_FMAT.get(level_name, '%s') % msg
 
 
-def init_log(log_path, level=logging.INFO, when="D", backup=7):
+def init_log(log_path, when="D", backup=7):
     """
     Initialize logging facility.
 
@@ -59,6 +63,8 @@ def init_log(log_path, level=logging.INFO, when="D", backup=7):
 
     Returns True if initialize the logger successfully.
     """
+    level_name = CONFIG['LOGGER']['level']
+    level = _getLevel(level_name)
     fmt = CONFIG['LOGGER']['format']
     datefmt = CONFIG['LOGGER']['datefmt']
     formatter = logging.Formatter(fmt, datefmt)
@@ -90,3 +96,14 @@ def init_log(log_path, level=logging.INFO, when="D", backup=7):
         logger.error("faild to add file handler to logger:  %s" % e)
         return False
     return True
+
+def setup_test_logging():
+    """
+    Initialize logging for testing.
+    """
+    _path = os.path.abspath(__file__) 
+    _dir = os.path.dirname(_path)
+    _dir = os.path.join(os.path.dirname(_dir), 'log')
+    name = datetime.datetime.now().strftime("%y-%m-%d")
+    log_path = os.path.join(_dir, name)
+    init_log(log_path)
