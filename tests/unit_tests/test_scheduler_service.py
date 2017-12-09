@@ -15,6 +15,7 @@ class TestSchedulerService:
     client_transport = None
     client = None
     SCHEDULER_SERVICE_CONFIG = None
+    @staticmethod
     def setup_class(cls):
         """
         Called for each test class.
@@ -32,5 +33,6 @@ class TestSchedulerService:
         ret = TestSchedulerService.client.register_downloader('test') 
         assert ret == ttypes.RetStatus.SUCCESS
 
+    @staticmethod
     def teardown_class(cls):
         cls.client_transport.close()

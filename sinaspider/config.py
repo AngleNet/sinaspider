@@ -14,3 +14,6 @@ def dir_path():
 CONFIG = None
 with open(os.path.join(dir_path(), 'config.json')) as _config_fd:
     CONFIG = json.load(_config_fd)
+
+DOWNLOADER_CONFIG = CONFIG['DOWNLOADER']
+SCHEDULER_CONFIG  = CONFIG['SCHEDULER_SERVICE']

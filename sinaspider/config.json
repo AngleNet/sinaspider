@@ -1,4 +1,11 @@
 {
+    "DOWNLOADER":{
+        "link_batch_size": 100
+    },
+    "SCHEDULER_SERVICE":{
+        "addr": "127.0.0.1",
+        "port": "9999"
+    },
     "LOGGER":{
         "use_terminal": true,
         "level": "DEBUG",
