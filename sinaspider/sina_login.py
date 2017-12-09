@@ -10,7 +10,6 @@ import re
 import requests
 import rsa
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class ResponseUtils(object):
@@ -30,26 +29,19 @@ class ResponseUtils(object):
             return match.group(1)
         return None
 
-class Client(object):
+class SinaSessionLoginer(object):
     "Login implements the weibo login process."
-    def __init__(self, user_name, password):
+    def __init__(self, session):
         """
         Input:
-        - user_name: A string of user name.
-        - password: A string of password.
+        - session: A requests.Session object.
         """
-        self.user_name = user_name
-        self.password = password
         self.prelogin_url = "http://login.sina.com.cn/sso/prelogin.php?entry=weibo" \
                            "&callback=sinaSSOController.preloginCallBack&su=&rsakt" \
                            "=mod&client=ssologin.js(v1.4.18)&_=1407721000736"
         self.login_url = "http://login.sina.com.cn/sso/login.php?client=ssologin.js(v1.4.18)"
-        self.header = {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit' \
-                                      '/537.36 (KHTML, like Gecko) Chrome/37.0.2062.120 Safari/537.36'
-                      }
-        self.session = requests.Session()
-        self.session.headers.update(self.header)
+        self.user_identity = None
+        self.session = session
         
     def _encrypt(self, server_time, nonce, pubkey, rsakv):
         """
@@ -57,10 +49,11 @@ class Client(object):
         
         Return a dict of encrypted user identification for login.
         """
-        user_name_base64 = base64.encodebytes(self.user_name.encode('utf-8'))[:-1]
+        user_name_base64 = base64.encodebytes(
+                                self.user_identity.user_name.encode('utf-8'))[:-1]
         pubkey = int(pubkey, 16)
         key = rsa.PublicKey(pubkey, 65537)
-        message = str(server_time) + '\t' + str(nonce) + '\n' + str(self.password)  # 拼接明文加密文件中得到
+        message = str(server_time) + '\t' + str(nonce) + '\n' + str(self.user_identity.password)  # 拼接明文加密文件中得到
         passwd = rsa.encrypt(message.encode('utf-8'), key)  # 加密
         passwd = binascii.b2a_hex(passwd) 
         ret = { 
@@ -87,10 +80,12 @@ class Client(object):
         logger.debug('Encrypted payload is: %s', ret)
         return ret
 
-    def login(self):
+    def login(self, user_identity):
         """
-        Login procedure.
+        Login via the specified user identity and store the cookies to the
+        specified session.
         """
+        self.user_identity = user_identity
         # Phase one: Retrieve server time and public key for user identifier encryption.
         logger.info('Login Phase 1: retrieve server time and public key')
         res = self.session.get(self.prelogin_url)
@@ -118,4 +113,3 @@ class Client(object):
         logger.debug('Get login cookies: %s', res.cookies)
         logger.debug('Session cookies: %s', self.session.cookies)
         logger.info('Login success')
-        return True

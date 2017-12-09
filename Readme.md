@@ -26,3 +26,6 @@ A simple weibo spider which collects trending post messages.
 * Thrift 
 
     `thrift --out . --gen py:newstyle services.thrift`
+* Nice python libs:
+
+    > multiprocessing, threading, concurrent, twisted

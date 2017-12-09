@@ -10,10 +10,12 @@ import thrift
 from sinaspider.config import * 
 import sinaspider.scheduler
 from sinaspider.services.scheduler_service import Client
+from sinaspider.services.ttypes import *
+from sinaspider.sina_login import SinaSessionLoginer
 
 logger = logging.getLogger(__name__)
 
-class Downloader(object):
+class Downloader(threading.Thread):
     """
     A simple downloader. The downloader starts, it grabs a batch of links from 
     the master scheduler and starts to download the web page. When downloaded, 
@@ -24,56 +26,57 @@ class Downloader(object):
         Input:
         - name: A string of downloader name.
         """
-        self.name = name
-        self.callbacks = dict(finish=list(),
-                              login=None)
-
-        self.session = requests.Session()
-        self.links = list()
-
-        self._stop_event = threading.Event()
+        threading.Thread.__init__(self, name=name, daemon=True)
+        self.callbacks = list()             # Called per link downloaded
+        self.session = requests.Session()   # Store login session
+        self.links = list()                 # Downloading links
+        self.user_identity = None           # user name and password
+        self.loginer = SinaSessionLoginer(self.session) # Login when session expired
     
     def run(self):
         """
         Entry of the downloader. The main working loop.
         """
         try:
+            logger.info('Starting %s' % self.name)
             transport = thrift.transport.TSocket.TSocket(SCHEDULER_CONFIG['addr'], 
                                                          SCHEDULER_CONFIG['port'])
             transport = thrift.transport.TTransport.TBufferedTransport(transport)
             protocol = thrift.protocol.TBinaryProtocol.TBinaryProtocol(transport)
             client = Client(protocol)
+            logger.debug('Connecting scheduler_service %s' % SCHEDULER_CONFIG['addr'])
             transport.open()
+            logger.debug('Conencted.')
             client.register_downloader(self.name)
-            
+            self.user_identity = client.request_user_identity()
             while True:
                 self.links = client.grab_links(DOWNLOADER_CONFIG['link_batch_size'])
                 for _ in range(len(self.links)):
                     link = self.links[-1]
+                    logger.debug('Downloading %s.' % link)
                     response = self._download(link)
                     if not response:
                         break
-                    for callback in self.callbacks['finish']:
-                        callback(response)
+                    for callback in self.callbacks:
+                        logger.debug('Running callback: %s.' % callback.__name__)
+                        response = callback(response)
                     del self.links[-1]
         except thrift.transport.TTransport.TTransportException:
-            if transport.isOpen():
-                transport.close()
             logging.exception('Exception in connecting to scheduler.') 
-        logger.info('Downloader %s stopped.' % self.name)
         if transport.isOpen():
             client.submit_links(self.links)
             client.unregister_downloader(self.name)
             transport.close()
+        logger.info('Downloader %s stopped.' % self.name)
     
     def stop(self):
         """
         Stop the downloader.
         """
-        self._stop_event.set()
+        self._stop()
         
     
-    def register_finish_callback(self, func):
+    def register_callback(self, func):
         """
         Register a finish callback. If multiple callbacks have been registered,
         the callback will be chained. When the final callback gets called, the 
@@ -85,32 +88,23 @@ class Downloader(object):
                     doing some dirty work
                     return Response
         """
-        self.callbacks['finish'].append(func)
-    
-    def register_login_callback(self, func):
-        """
-        Register a login callback. 
+        self.callbacks.append(func)
+        logger.info('Register callback %s.' % func.__name__)
 
-        Input:
-        - func: A function of the prototype:
-                def func(Response):
-                    doing some dirty work
-                    return Response
-        """
-        self.callbacks['login'] = func
-    
     def _download(self, link):
         """
         Download the link.
 
+        Input:
+        - link: A string of link to be downloaded.
         """
-        while not self._stop_event.isSet():
+        while not self._is_stopped:
             try:
                 response = self.session.get(link)
                 if self._is_login(response):
                     return response
-                login_callback = self.callbacks['login']
-                login_callback(self.session)
+                logger.info('Session expired. Relogin...')
+                self.loginer.login(self.user_identity)
             except requests.RequestException:
                 logging.exception('Exception in downloading %s' % link)
         return None
@@ -127,21 +121,32 @@ class DownloaderPool(object):
     """
     A downloader pool. The pool has a handful of downloader threads.
     """
-    def __init__(self):
+    def __init__(self, callbacks):
         """
         Create a downloader pool and initialize the downloaders. 
+
+        Input:
+        - callbacks: A list of callbacks to be called when a link is downloaded.
         """
-        pass
+        self.downloaders = list()
+        for idx in range(DOWNLOADER_CONFIG['number_of_downloaders']):
+            name = DOWNLOADER_CONFIG['name_prefix'] + '-' + str(idx)
+            downloader = Downloader(name)
+            for callback in callbacks:
+                downloader.register_callback(callback)
+            self.downloaders.append(downloader)
     
     def start(self):
         """
         Start all of the downloaders.
         """
-        pass
+        for downloader in self.downloaders:
+            downloader.start()
     
     def stop(self):
         """
         Stop all of the downloaders.
         """
-        pass
+        for downloader in self.downloaders:
+            downloader.stop()
 
