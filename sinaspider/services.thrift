@@ -74,10 +74,5 @@ service scheduler_service{
     /**
      * Submit a batch of proxies to scheduler.
      */
-    RetStatus submit_proxies(1: required list<ProxyAddress> addrs),
-
-    /**
-     * Kill the service. Testing only.
-     */
-    RetStatus _kill_service()
+    RetStatus submit_proxies(1: required list<ProxyAddress> addrs)
 }

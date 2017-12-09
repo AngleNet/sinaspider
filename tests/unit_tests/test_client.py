@@ -8,4 +8,3 @@ def test_response_utils_parse_redirect_url():
     url = 'http://weibo.com'
     wrap_url = 'location.replace("' + url + '")'
     assert ResponseUtils.parseRedirectUrl('test :'+wrap_url) == url
-        

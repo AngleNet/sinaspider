@@ -50,7 +50,7 @@
             ],
             "options": {
                 "env": {
-                    "PYTEST_ADDOPTS" : "-vv --tb=native -k unit_tests"
+                    "PYTEST_ADDOPTS" : "-vv --tb=native -k unit_tests -s"
                 }
             },
             "problemMatcher": [

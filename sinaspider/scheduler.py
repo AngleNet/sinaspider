@@ -3,6 +3,8 @@ A simple scheduler.
 """
 
 import logging
+import multiprocessing
+import os
 
 import sinaspider.services.scheduler_service as scheduler_service
 import sinaspider.services.ttypes as ttypes
@@ -20,7 +22,7 @@ class SchedulerServiceHandler(scheduler_service.Iface):
       Parameters:
        - name
       """
-      logger.info('register downloader: %s' % name)
+      logger.debug('register downloader: %s' % name)
       return ttypes.RetStatus.SUCCESS
 
     def unregister_downloader(self, name):
@@ -91,7 +93,7 @@ class SchedulerServiceHandler(scheduler_service.Iface):
       """
       return ttypes.RetStatus.SUCCESS
 
-
-
-class Scheduler(object):
+class SchedulerServer():
+    """
+    """
     pass

@@ -13,6 +13,7 @@ A simple weibo spider which collects trending post messages.
 * [Google python style](https://google.github.io/styleguide/pyguide.html)
 ### Logging
 * [Best logging practice](https://fangpenlin.com/posts/2012/08/26/good-logging-practice-in-python/)
+* [Logging cookbook]()
 ### Configuration management
 * [4 ways to manage configuration](https://hackernoon.com/4-ways-to-manage-the-configuration-in-python-4623049e841b)
 ### APIs
