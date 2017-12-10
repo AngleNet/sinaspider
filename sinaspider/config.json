@@ -4,16 +4,19 @@
         "name_prefix": "downloader-test",
         "number_of_downloaders": 10
     },
-    "SCHEDULER_SERVICE":{
-        "addr": "127.0.0.1",
-        "port": "9999"
-    },
     "LOGGER":{
         "use_terminal": true,
         "level": "DEBUG",
         "format": "[%(levelname)s]: %(asctime)s: %(filename)s:%(lineno)d %(name)s(%(processName)s): %(message)s",
         "datefmt": "%m-%d %H:%M:%S",
         "backup_window": 7
+    },
+    "PIPELINE":{
+        "engine_pool_size": 2
+    },
+    "SCHEDULER_SERVICE":{
+        "addr": "127.0.0.1",
+        "port": "9999"
     },
     "TEST":{
         "_comment": "Unit testing configures",

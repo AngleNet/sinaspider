@@ -16,4 +16,5 @@ with open(os.path.join(dir_path(), 'config.json')) as _config_fd:
     CONFIG = json.load(_config_fd)
 
 DOWNLOADER_CONFIG = CONFIG['DOWNLOADER']
+PIPELINE_CONFIG = CONFIG['PIPELINE']
 SCHEDULER_CONFIG  = CONFIG['SCHEDULER_SERVICE']
