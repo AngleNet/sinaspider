@@ -65,11 +65,12 @@ def _configure_logger(name):
         stream_handler.setLevel(logging.DEBUG)
         stream_handler.setFormatter(stream_formatter)
         logger.addHandler(stream_handler)
-    name = now + name
-    handler = logging.handlers.TimedRotatingFileHandler(name, when='D',
+    log_path = os.path.join(dir_path, now+name)
+    handler = logging.handlers.TimedRotatingFileHandler(log_path, when='D',
                                                         backupCount=7)
     handler.setFormatter(formatter)
     logger.addHandler(handler)
+    logger.setLevel(_getLevel(LOGGER_CONFIG['level']))
 
 def configure_listener_logger(log_path):
     """
