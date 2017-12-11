@@ -12,6 +12,7 @@ import sinaspider.log
 from sinaspider.scheduler import SchedulerServiceHandler
 from sinaspider.services.scheduler_service import Processor, Client
 
+
 @pytest.fixture(scope='session', autouse=True)
 def init():
     """
@@ -20,8 +21,8 @@ def init():
     See https://docs.pytest.org/en/latest/fixture.html
     """
     queue = multiprocessing.Queue(-1)
-    log_process = multiprocessing.Process(target=sinaspider.log.log_listener, 
-                                      args=(queue,))
+    log_process = multiprocessing.Process(target=sinaspider.log.log_listener,
+                                          args=(queue,))
     log_process.start()
     sinaspider.log.configure_logger(queue)
 
@@ -33,7 +34,8 @@ def init():
     server_transport = TSocket.TServerSocket(host, port)
     tfactory = TTransport.TBufferedTransportFactory()
     pfactory = TBinaryProtocol.TBinaryProtocolFactory()
-    tserver = TServer.TSimpleServer(processor, server_transport, tfactory, pfactory)
+    tserver = TServer.TSimpleServer(
+        processor, server_transport, tfactory, pfactory)
     scheduler_process = multiprocessing.Process(target=tserver.serve)
     scheduler_process.start()
     yield None
@@ -42,4 +44,3 @@ def init():
     log_process.join()
     scheduler_process.terminate()
     scheduler_process.join()
-    

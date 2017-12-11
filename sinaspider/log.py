@@ -7,11 +7,14 @@ import logging
 import logging.handlers
 import os
 
-from sinaspider.config import CONFIG
+from sinaspider.config import *
 
 # Private members
+
+
 def _getLevel(name):
     return logging._nameToLevel.get(name, 'INFO')
+
 
 _COLOR_RESET = '\033[1;0m'
 _COLOR_RED = '\033[1;31m'
@@ -25,7 +28,8 @@ _COLORERD_LOG_FMAT = {
     'ERROR': _COLOR_RED + '%s' + _COLOR_RESET,
     'CRITICAL': _COLOR_RED + '%s' + _COLOR_RESET,
 }
-LOGGER_CONFIG = CONFIG['LOGGER']
+
+
 class ColoredFormatter(logging.Formatter):
     """
     A colorful formatter.
@@ -41,6 +45,7 @@ class ColoredFormatter(logging.Formatter):
         level_name = record.levelname
         msg = logging.Formatter.format(self, record)
         return _COLORERD_LOG_FMAT.get(level_name, '%s') % msg
+
 
 def configure_listener_logger(log_path):
     """
@@ -78,11 +83,14 @@ def configure_listener_logger(log_path):
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
+
 def configure_logger(queue):
-    handler = logging.handlers.QueueHandler(queue)  # Just the one handler needed
+    handler = logging.handlers.QueueHandler(
+        queue)  # Just the one handler needed
     logger = logging.getLogger()
     logger.addHandler(handler)
     logger.setLevel(_getLevel(LOGGER_CONFIG['level']))
+
 
 def log_listener(queue):
     """
@@ -91,7 +99,7 @@ def log_listener(queue):
     Input:
     - queue: A multiprocessing.Queue which holds temporary log messages.
     """
-    abs_path = os.path.abspath(__file__) 
+    abs_path = os.path.abspath(__file__)
     abs_dir = os.path.dirname(abs_path)
     abs_dir = os.path.join(os.path.dirname(abs_dir), 'log')
     name = datetime.datetime.now().strftime("%y-%m-%d")
@@ -103,11 +111,11 @@ def log_listener(queue):
             if record is None:  # End sentinel
                 break
             logger = logging.getLogger(record.name)
-            logger.handle(record)  # No level or filter logic applied - just do it!
+            # No level or filter logic applied - just do it!
+            logger.handle(record)
         except Exception as e:
             if os.name == 'nt':
                 print('exception in logger: %s' % e)
             else:
                 import syslog
                 syslog.syslog('Exception in logger: %s' % e)
-

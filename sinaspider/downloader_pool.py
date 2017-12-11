@@ -7,13 +7,12 @@ import requests
 import threading
 import thrift
 
-from sinaspider.config import * 
+from sinaspider.config import *
 import sinaspider.scheduler
 from sinaspider.services.scheduler_service import Client
 from sinaspider.services.ttypes import *
 from sinaspider.sina_login import SinaSessionLoginer
 
-logger = logging.getLogger(__name__)
 
 class Downloader(threading.Thread):
     """
@@ -21,6 +20,7 @@ class Downloader(threading.Thread):
     the master scheduler and starts to download the web page. When downloaded, 
     call the finish callback. The downloader should do any redirects if needed.
     """
+
     def __init__(self, name):
         """
         Input:
@@ -31,51 +31,57 @@ class Downloader(threading.Thread):
         self.session = requests.Session()   # Store login session
         self.links = list()                 # Downloading links
         self.user_identity = None           # user name and password
-        self.loginer = SinaSessionLoginer(self.session) # Login when session expired
-    
+        self.loginer = SinaSessionLoginer(
+            self.session)  # Login when session expired
+        self.logger = logging.getLogger(self.__class__.__name__)
+
     def run(self):
         """
         Entry of the downloader. The main working loop.
         """
         try:
-            logger.info('Starting %s' % self.name)
-            transport = thrift.transport.TSocket.TSocket(SCHEDULER_CONFIG['addr'], 
+            self.logger.info('Starting %s' % self.name)
+            transport = thrift.transport.TSocket.TSocket(SCHEDULER_CONFIG['addr'],
                                                          SCHEDULER_CONFIG['port'])
-            transport = thrift.transport.TTransport.TBufferedTransport(transport)
-            protocol = thrift.protocol.TBinaryProtocol.TBinaryProtocol(transport)
+            transport = thrift.transport.TTransport.TBufferedTransport(
+                transport)
+            protocol = thrift.protocol.TBinaryProtocol.TBinaryProtocol(
+                transport)
             client = Client(protocol)
-            logger.debug('Connecting scheduler_service %s' % SCHEDULER_CONFIG['addr'])
+            self.logger.debug('Connecting scheduler_service %s' %
+                              SCHEDULER_CONFIG['addr'])
             transport.open()
-            logger.debug('Conencted.')
+            self.logger.debug('Conencted.')
             client.register_downloader(self.name)
             self.user_identity = client.request_user_identity()
             while True:
-                self.links = client.grab_links(DOWNLOADER_CONFIG['link_batch_size'])
+                self.links = client.grab_links(
+                    DOWNLOADER_CONFIG['link_batch_size'])
                 for _ in range(len(self.links)):
                     link = self.links[-1]
-                    logger.debug('Downloading %s.' % link)
+                    self.logger.debug('Downloading %s.' % link)
                     response = self._download(link)
                     if not response:
                         break
                     for callback in self.callbacks:
-                        logger.debug('Running callback: %s.' % callback.__name__)
+                        self.logger.debug(
+                            'Running callback: %s.' % callback.__name__)
                         response = callback(response)
                     del self.links[-1]
         except thrift.transport.TTransport.TTransportException:
-            logging.exception('Exception in connecting to scheduler.') 
+            logging.exception('Exception in connecting to scheduler.')
         if transport.isOpen():
             client.submit_links(self.links)
             client.unregister_downloader(self.name)
             transport.close()
-        logger.info('Downloader %s stopped.' % self.name)
-    
+        self.logger.info('Downloader %s stopped.' % self.name)
+
     def stop(self):
         """
         Stop the downloader.
         """
         self._stop()
-        
-    
+
     def register_callback(self, func):
         """
         Register a finish callback. If multiple callbacks have been registered,
@@ -89,7 +95,7 @@ class Downloader(threading.Thread):
                     return Response
         """
         self.callbacks.append(func)
-        logger.info('Register callback %s.' % func.__name__)
+        self.logger.info('Register callback %s.' % func.__name__)
 
     def _download(self, link):
         """
@@ -103,25 +109,25 @@ class Downloader(threading.Thread):
                 response = self.session.get(link)
                 if self._is_login(response):
                     return response
-                logger.info('Session expired. Relogin...')
+                self.logger.info('Session expired. Relogin...')
                 self.loginer.login(self.user_identity)
             except requests.RequestException:
                 logging.exception('Exception in downloading %s' % link)
         return None
-    
+
     def _is_login(self, response):
         """
         Should be implemented inline.
         """
         return True
 
-    
 
 class DownloaderPool(object):
     """
     A downloader pool. The pool has a handful of downloader threads.
     """
-    def __init__(self, callbacks):
+
+    def __init__(self, callbacks, log_queue):
         """
         Create a downloader pool and initialize the downloaders. 
 
@@ -135,18 +141,19 @@ class DownloaderPool(object):
             for callback in callbacks:
                 downloader.register_callback(callback)
             self.downloaders.append(downloader)
-    
+        self.log_queue = log_queue
+
     def start(self):
         """
         Start all of the downloaders.
         """
+        sinaspider.log.configure_logger(self.log_queue)
         for downloader in self.downloaders:
             downloader.start()
-    
+
     def stop(self):
         """
         Stop all of the downloaders.
         """
         for downloader in self.downloaders:
             downloader.stop()
-

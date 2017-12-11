@@ -4,6 +4,7 @@ SinaSpider's configration manager.
 import json
 import os.path
 
+
 def dir_path():
     """
     Return a string of current directory path.
@@ -11,10 +12,13 @@ def dir_path():
     abs_path = os.path.abspath(__file__)
     _dir = os.path.dirname(abs_path)
     return _dir
+
+
 CONFIG = None
 with open(os.path.join(dir_path(), 'config.json')) as _config_fd:
     CONFIG = json.load(_config_fd)
 
 DOWNLOADER_CONFIG = CONFIG['DOWNLOADER']
+LOGGER_CONFIG = CONFIG['LOGGER']
 PIPELINE_CONFIG = CONFIG['PIPELINE']
-SCHEDULER_CONFIG  = CONFIG['SCHEDULER_SERVICE']
+SCHEDULER_CONFIG = CONFIG['SCHEDULER_SERVICE']

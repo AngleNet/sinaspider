@@ -16,7 +16,8 @@
     },
     "SCHEDULER_SERVICE":{
         "addr": "127.0.0.1",
-        "port": "9999"
+        "port": "9999",
+        "alive": true
     },
     "TEST":{
         "_comment": "Unit testing configures",

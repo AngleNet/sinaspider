@@ -11,10 +11,12 @@ from sinaspider.services import ttypes
 from sinaspider.scheduler import SchedulerServiceHandler
 from sinaspider.services.scheduler_service import Client, Processor
 
+
 class TestSchedulerService:
     client_transport = None
     client = None
     SCHEDULER_SERVICE_CONFIG = None
+
     @staticmethod
     def setup_class(cls):
         """
@@ -30,7 +32,7 @@ class TestSchedulerService:
         cls.client_transport.open()
 
     def test_register_downloader(self):
-        ret = TestSchedulerService.client.register_downloader('test') 
+        ret = TestSchedulerService.client.register_downloader('test')
         assert ret == ttypes.RetStatus.SUCCESS
 
     @staticmethod

@@ -12,6 +12,7 @@ import rsa
 
 logger = logging.getLogger(__name__)
 
+
 class ResponseUtils(object):
     @staticmethod
     def parseJson(text):
@@ -29,34 +30,37 @@ class ResponseUtils(object):
             return match.group(1)
         return None
 
+
 class SinaSessionLoginer(object):
     "Login implements the weibo login process."
+
     def __init__(self, session):
         """
         Input:
         - session: A requests.Session object.
         """
         self.prelogin_url = "http://login.sina.com.cn/sso/prelogin.php?entry=weibo" \
-                           "&callback=sinaSSOController.preloginCallBack&su=&rsakt" \
-                           "=mod&client=ssologin.js(v1.4.18)&_=1407721000736"
+            "&callback=sinaSSOController.preloginCallBack&su=&rsakt" \
+            "=mod&client=ssologin.js(v1.4.18)&_=1407721000736"
         self.login_url = "http://login.sina.com.cn/sso/login.php?client=ssologin.js(v1.4.18)"
         self.user_identity = None
         self.session = session
-        
+
     def _encrypt(self, server_time, nonce, pubkey, rsakv):
         """
         Encrypt uesr identifier using pubkey via RSA.
-        
+
         Return a dict of encrypted user identification for login.
         """
         user_name_base64 = base64.encodebytes(
-                                self.user_identity.user_name.encode('utf-8'))[:-1]
+            self.user_identity.user_name.encode('utf-8'))[:-1]
         pubkey = int(pubkey, 16)
         key = rsa.PublicKey(pubkey, 65537)
-        message = str(server_time) + '\t' + str(nonce) + '\n' + str(self.user_identity.password)  # 拼接明文加密文件中得到
+        message = str(server_time) + '\t' + str(nonce) + '\n' + \
+            str(self.user_identity.password)  # 拼接明文加密文件中得到
         passwd = rsa.encrypt(message.encode('utf-8'), key)  # 加密
-        passwd = binascii.b2a_hex(passwd) 
-        ret = { 
+        passwd = binascii.b2a_hex(passwd)
+        ret = {
             'entry': 'weibo',
             'gateway': '1',
             'from': '',

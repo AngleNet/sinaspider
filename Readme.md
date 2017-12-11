@@ -29,3 +29,6 @@ A simple weibo spider which collects trending post messages.
 * Nice python libs:
 
     > multiprocessing, threading, concurrent, twisted
+
+* Formatting:
+    `autopep8 --in-place --recursive --aggressive`
