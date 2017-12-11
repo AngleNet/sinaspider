@@ -67,7 +67,7 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         Parameters:
          - size
         """
-        return list('http://weibo.com')
+        return ['http://www.tldp.org/HOWTO/3-Button-Mouse-1.html']
 
     def submit_links(self, links):
         """
@@ -115,7 +115,7 @@ class SchedulerServerDaemon(sinaspider.utils.Daemon):
         self.port = SCHEDULER_CONFIG['port']
 
     def run(self):
-        sinaspider.log._configure_logger('.scheduler.log')
+        sinaspider.log.configure_logger('.scheduler.log')
         self.logger = logging.getLogger(self.name)
         while True:
             self._run()
@@ -139,71 +139,56 @@ class SchedulerServerDaemon(sinaspider.utils.Daemon):
        
 
 
-class SchedulerServiceClient(multiprocessing.Process):
+class SchedulerServiceClient(object):
     """
     A scheduler client daemon.
     """
 
-    def __init__(self, log_queue):
-        multiprocessing.Process.__init__(
-            self, name='SchedulerServiceClient', daemon=True)
-        self._links_queue = multiprocessing.Queue(-1)
-        self._proxy_queue = multiprocessing.Queue(-1)
-
-        self.log_queue = log_queue
-        self.logger = None        # logger can only be used in run.
-
-    def submit_links(self, links):
+    def __init__(self, queue):
         """
         Input:
-        - links: A list of string of link.
+        - queue: A multiprocessing.Queue
         """
-        self._links_queue.put(links)
-
-    def submit_proxy(self, proxies):
-        """
-        Input:
-        - proxies: A list of ttypes.ProxyAddress.
-        """
-        self._proxy_queue.put(self, proxies)
+        self.queue = queue
+        self.name = self.__class__.__name__
+        self.transport = TSocket.TSocket(SCHEDULER_CONFIG['addr'],
+         SCHEDULER_CONFIG['port'])
+        self.transport = TTransport.TBufferedTransport(self.transport)
+        protocol = TBinaryProtocol.TBinaryProtocol(self.transport)
+        self.client = scheduler_service.Client(protocol)
     
     def run(self):
-        sinaspider.log.configure_logger(self.log_queue)
-        self.logger = logging.getLogger(self.name)
-        interval = SCHEDULER_CONFIG['client_failover_interval']
-        while True:
-            self._run()
-            self.logger.warn('Starting in %s seconds' % interval)
-            time.sleep(interval)
-
-
-    def _run(self):
         """
         Start entry.
         """
-        try:
-            self.logger.info('Starting %s' % self.name)
-            transport = TSocket.TSocket(SCHEDULER_CONFIG['addr'],
-                                        SCHEDULER_CONFIG['port'])
-            transport = TTransport.TBufferedTransport(
-                transport)
-            protocol = TBinaryProtocol.TBinaryProtocol(
-                transport)
-            client = scheduler_service.Client(protocol)
-            self.logger.debug('Connecting to scheduler_service %s' %
-                              SCHEDULER_CONFIG['addr'])
-            transport.open()
-            self.logger.debug('Conencted.')
-            while True:
-                links = self._links_queue.get()
-                proxies = self._proxy_queue.get()
-                client.submit_links(links)
-                client.submit_links(proxies)
-                self.logger.debug('Submit links: %s' % links)
-                self.logger.debug('Submit proxies: %s' % str(proxies))
-        except TTransport.TTransportException:
-            self.logger.exception('Exception in connecting to scheduler.')
-        if transport.isOpen():
-            client.unregister_downloader(self.name)
-            transport.close()
-        self.logger.info('%s stopped.' % self.name)
+        interval = SCHEDULER_CONFIG['client_failover_interval']
+        logger = logging.getLogger(self.name)
+        logger.info('Starting %s' % self.name)
+        while True:
+            try:
+                logger.debug('Connecting to scheduler_service %s' %
+                                  SCHEDULER_CONFIG['addr'])
+                self.transport.open()
+                logger.debug('Conencted.')
+                while True:
+                    links = self.queue.get()
+                    if links is None:
+                        break
+                    self.client.submit_links(links)
+                    logger.debug('Submit links: %s' % links)
+                break
+            except TTransport.TTransportException:
+                logger.exception('Exception in connecting to scheduler.')
+        if self.transport.isOpen():
+            self.client.unregister_downloader(self.name)
+            self.transport.close()
+        logger.info('%s stopped.' % self.name)
+
+    def submit_links(self, link):
+        self.queue.put(link)
+
+    def stop(self):
+        """
+        Stop the client.
+        """
+        self.queue.put_nowait(None)

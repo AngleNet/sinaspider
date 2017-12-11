@@ -3,6 +3,7 @@ A logger initializer.
 """
 
 import datetime
+import importlib
 import logging
 import logging.handlers
 import os
@@ -16,11 +17,11 @@ def _getLevel(name):
     return logging._nameToLevel.get(name, 'INFO')
 
 
-_COLOR_RESET = '\033[1;0m'
-_COLOR_RED = '\033[1;31m'
-_COLOR_GREEN = '\033[1;32m'
-_COLOR_YELLOW = '\033[1;33m'
-_COLOR_BLUE = '\033[1;34m'
+_COLOR_RESET = '\033[;0m'
+_COLOR_RED = '\033[;31m'
+_COLOR_GREEN = '\033[;32m'
+_COLOR_YELLOW = '\033[;33m'
+_COLOR_BLUE = '\033[;34m'
 _COLORERD_LOG_FMAT = {
     'DEBUG': _COLOR_BLUE + '%s' + _COLOR_RESET,
     'INFO': _COLOR_GREEN + '%s' + _COLOR_RESET,
@@ -28,7 +29,6 @@ _COLORERD_LOG_FMAT = {
     'ERROR': _COLOR_RED + '%s' + _COLOR_RESET,
     'CRITICAL': _COLOR_RED + '%s' + _COLOR_RESET,
 }
-
 
 class ColoredFormatter(logging.Formatter):
     """
@@ -46,10 +46,11 @@ class ColoredFormatter(logging.Formatter):
         msg = logging.Formatter.format(self, record)
         return _COLORERD_LOG_FMAT.get(level_name, '%s') % msg
 
-def _configure_logger(name):
+def configure_logger(log_file_suffix):
     """
     Configure the logger.
     """
+    importlib.reload(logging)
     now = datetime.datetime.now().strftime("%y-%m-%d")
     fmt = LOGGER_CONFIG['format']
     datefmt = LOGGER_CONFIG['datefmt']
@@ -65,7 +66,7 @@ def _configure_logger(name):
         stream_handler.setLevel(logging.DEBUG)
         stream_handler.setFormatter(stream_formatter)
         logger.addHandler(stream_handler)
-    log_path = os.path.join(dir_path, now+name)
+    log_path = os.path.join(dir_path, now+log_file_suffix)
     handler = logging.handlers.TimedRotatingFileHandler(log_path, when='D',
                                                         backupCount=7)
     handler.setFormatter(formatter)
@@ -90,6 +91,7 @@ def configure_listener_logger(log_path):
 
     Returns True if initialize the logger successfully.
     """
+    importlib.reload(logging) #Get a clean logging facility
     fmt = LOGGER_CONFIG['format']
     datefmt = LOGGER_CONFIG['datefmt']
     formatter = logging.Formatter(fmt, datefmt)
@@ -109,7 +111,8 @@ def configure_listener_logger(log_path):
     logger.addHandler(handler)
 
 
-def configure_logger(queue):
+def configure_sender_logger(queue):
+    importlib.reload(logging)
     handler = logging.handlers.QueueHandler(
         queue)  # Just the one handler needed
     logger = logging.getLogger()

@@ -2,7 +2,7 @@
     "DOWNLOADER":{
         "link_batch_size": 100,
         "name_prefix": "downloader-test",
-        "number_of_downloaders": 10
+        "num_downloaders": 2 
     },
     "LOGGER":{
         "use_terminal": true,
