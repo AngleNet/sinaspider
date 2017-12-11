@@ -3,7 +3,7 @@ A simple html processing pipeline.
 """
 
 import logging
-import concurrent
+import concurrent.futures
 
 from sinaspider.config import *
 

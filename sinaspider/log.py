@@ -46,6 +46,30 @@ class ColoredFormatter(logging.Formatter):
         msg = logging.Formatter.format(self, record)
         return _COLORERD_LOG_FMAT.get(level_name, '%s') % msg
 
+def _configure_logger(name):
+    """
+    Configure the logger.
+    """
+    now = datetime.datetime.now().strftime("%y-%m-%d")
+    fmt = LOGGER_CONFIG['format']
+    datefmt = LOGGER_CONFIG['datefmt']
+    formatter = logging.Formatter(fmt, datefmt)
+    stream_formatter = ColoredFormatter(fmt, datefmt)
+    logger = logging.getLogger()
+    dir_path = os.path.dirname(os.path.abspath(__file__))
+    dir_path = os.path.join(os.path.dirname(dir_path), 'log')
+    if not os.path.isdir(dir_path):
+        os.makedirs(dir_path)
+    if LOGGER_CONFIG['use_terminal']:
+        stream_handler = logging.StreamHandler()
+        stream_handler.setLevel(logging.DEBUG)
+        stream_handler.setFormatter(stream_formatter)
+        logger.addHandler(stream_handler)
+    name = now + name
+    handler = logging.handlers.TimedRotatingFileHandler(name, when='D',
+                                                        backupCount=7)
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
 def configure_listener_logger(log_path):
     """

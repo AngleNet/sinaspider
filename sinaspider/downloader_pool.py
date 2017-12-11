@@ -5,6 +5,7 @@ A multithread downloader.
 import logging
 import requests
 import threading
+import time
 from thrift.protocol import TBinaryProtocol
 from thrift.transport import TTransport, TSocket
 
@@ -34,30 +35,41 @@ class Downloader(threading.Thread):
         self.user_identity = None           # user name and password
         self.loginer = SinaSessionLoginer(
             self.session)  # Login when session expired
-        self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger = None
 
     def run(self):
         """
         Entry of the downloader. The main working loop.
         """
-        try:
-            self.logger.info('Starting %s' % self.name)
-            transport = TSocket.TSocket(SCHEDULER_CONFIG['addr'],
-                                                         SCHEDULER_CONFIG['port'])
-            transport = TTransport.TBufferedTransport(
-                transport)
-            protocol = TBinaryProtocol.TBinaryProtocol(
-                transport)
-            client = Client(protocol)
-            self.logger.debug('Connecting scheduler_service %s' %
+        self.logger = logging.getLogger(self.name)
+        self.logger.info('Starting %s' % self.name)
+        transport = TSocket.TSocket(SCHEDULER_CONFIG['addr'],
+                                    SCHEDULER_CONFIG['port'])
+        transport = TTransport.TBufferedTransport(
+            transport)
+        protocol = TBinaryProtocol.TBinaryProtocol(
+            transport)
+        client = Client(protocol)
+        while True:
+            try:
+                self.logger.debug('Connecting scheduler_service %s' %
                               SCHEDULER_CONFIG['addr'])
-            transport.open()
-            self.logger.debug('Conencted.')
-            client.register_downloader(self.name)
-            self.user_identity = client.request_user_identity()
-            while True:
+                transport.open()
+                self.logger.debug('Connected.')
+                client.register_downloader(self.name)
+                self.logger.debug('Registered')
+                self.user_identity = client.request_user_identity()
+                self.logger.debug('Get user_identity %s' % str(self.user_identity))
+                break
+            except TTransport.TTransportException:
+                self.logger.exception('Exception while initializing %s, reconecting...' % self.name)
+        while True:
+            try:
+                if not transport.isOpen():
+                    transport.open()
                 self.links = client.grab_links(
                     DOWNLOADER_CONFIG['link_batch_size'])
+                self.logger.debug('Grab links: %s' % self.links)
                 for _ in range(len(self.links)):
                     link = self.links[-1]
                     self.logger.debug('Downloading %s.' % link)
@@ -69,8 +81,8 @@ class Downloader(threading.Thread):
                             'Running callback: %s.' % callback.__name__)
                         response = callback(response)
                     del self.links[-1]
-        except TTransport.TTransportException:
-            logging.exception('Exception in connecting to scheduler.')
+            except TTransport.TTransportException:
+                self.logger.exception('Exception in downloading loop: ')
         if transport.isOpen():
             client.submit_links(self.links)
             client.unregister_downloader(self.name)
@@ -135,8 +147,9 @@ class DownloaderPool(object):
         Input:
         - callbacks: A list of callbacks to be called when a link is downloaded.
         """
+        num_loaders = DOWNLOADER_CONFIG['number_of_downloaders']
         self.downloaders = list()
-        for idx in range(DOWNLOADER_CONFIG['number_of_downloaders']):
+        for idx in range(num_loaders):
             name = DOWNLOADER_CONFIG['name_prefix'] + '-' + str(idx)
             downloader = Downloader(name)
             for callback in callbacks:
@@ -151,6 +164,8 @@ class DownloaderPool(object):
         sinaspider.log.configure_logger(self.log_queue)
         for downloader in self.downloaders:
             downloader.start()
+        while True:
+            time.sleep(10)
 
     def stop(self):
         """
