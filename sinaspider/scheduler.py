@@ -6,7 +6,9 @@ import logging
 import multiprocessing
 import os
 import queue
-import thrift
+from thrift.protocol import TBinaryProtocol
+from thrift.transport import TTransport, TSocket
+from thrift.server import TServer
 
 import sinaspider.log
 import sinaspider.services.scheduler_service as scheduler_service
@@ -115,20 +117,23 @@ class SchedulerServer(multiprocessing.Process):
         self.log_queue = log_queue
 
     def run(self):
-        sinaspider.log.configure_logger(self.log_queue)
-        self.logger = logging.getLogger(self.name)
-        self.logger.info('Starting %s' % self.name)
-        handler = SchedulerServiceHandler()
-        processor = scheduler_service.Processor(handler)
-        server_transport = thrift.transport.TSocket.TServerSocket(self.host,
-                                                                  self.port)
-        tfactory = thrift.transport.TTransport.TBufferedTransportFactory()
-        pfactory = thrift.protocol.TBinaryProtocol.TBinaryProtocolFactory()
-        tserver = thrift.server.TServer.TSimpleServer(processor, server_transport,
-                                                      tfactory, pfactory)
-        self.logger.info('Serving requests...')
-        tserver.serve()
-        self.logger.info('Service %s stopped.' % self.name)
+        try:
+            sinaspider.log.configure_logger(self.log_queue)
+            self.logger = logging.getLogger(self.name)
+            self.logger.info('Starting %s' % self.name)
+            handler = SchedulerServiceHandler()
+            processor = scheduler_service.Processor(handler)
+            server_transport = TSocket.TServerSocket(self.host,
+                                                                      self.port)
+            tfactory = TTransport.TBufferedTransportFactory()
+            pfactory = TBinaryProtocol.TBinaryProtocolFactory()
+            tserver = TServer.TSimpleServer(processor, server_transport,
+                                                          tfactory, pfactory)
+            self.logger.info('Serving requests...')
+            tserver.serve()
+            self.logger.info('Service %s stopped.' % self.name)
+        except Exception:
+            logging.exception('%s failed accidently.' % self.name)
 
 
 class SchedulerServiceClient(multiprocessing.Process):
@@ -167,11 +172,11 @@ class SchedulerServiceClient(multiprocessing.Process):
             sinaspider.log.configure_logger(self.log_queue)
             self.logger = logging.getLogger(self.name)
             self.logger.info('Starting %s' % self.name)
-            transport = thrift.transport.TSocket.TSocket(SCHEDULER_CONFIG['addr'],
+            transport = TSocket.TSocket(SCHEDULER_CONFIG['addr'],
                                                          SCHEDULER_CONFIG['port'])
-            transport = thrift.transport.TTransport.TBufferedTransport(
+            transport = TTransport.TBufferedTransport(
                 transport)
-            protocol = thrift.protocol.TBinaryProtocol.TBinaryProtocol(
+            protocol = TBinaryProtocol.TBinaryProtocol(
                 transport)
             client = scheduler_service.Client(protocol)
             self.logger.debug('Connecting scheduler_service %s' %
@@ -185,7 +190,7 @@ class SchedulerServiceClient(multiprocessing.Process):
                 client.submit_links(proxies)
                 self.logger.debug('Submit links: %s' % links)
                 self.logger.debug('Submit proxies: %s' % str(proxies))
-        except thrift.transport.TTransport.TTransportException:
+        except TTransport.TTransportException:
             logging.exception('Exception in connecting to scheduler.')
         if transport.isOpen():
             client.unregister_downloader(self.name)

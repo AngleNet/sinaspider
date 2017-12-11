@@ -5,7 +5,8 @@ A multithread downloader.
 import logging
 import requests
 import threading
-import thrift
+from thrift.protocol import TBinaryProtocol
+from thrift.transport import TTransport, TSocket
 
 from sinaspider.config import *
 import sinaspider.scheduler
@@ -41,11 +42,11 @@ class Downloader(threading.Thread):
         """
         try:
             self.logger.info('Starting %s' % self.name)
-            transport = thrift.transport.TSocket.TSocket(SCHEDULER_CONFIG['addr'],
+            transport = TSocket.TSocket(SCHEDULER_CONFIG['addr'],
                                                          SCHEDULER_CONFIG['port'])
-            transport = thrift.transport.TTransport.TBufferedTransport(
+            transport = TTransport.TBufferedTransport(
                 transport)
-            protocol = thrift.protocol.TBinaryProtocol.TBinaryProtocol(
+            protocol = TBinaryProtocol.TBinaryProtocol(
                 transport)
             client = Client(protocol)
             self.logger.debug('Connecting scheduler_service %s' %
@@ -68,7 +69,7 @@ class Downloader(threading.Thread):
                             'Running callback: %s.' % callback.__name__)
                         response = callback(response)
                     del self.links[-1]
-        except thrift.transport.TTransport.TTransportException:
+        except TTransport.TTransportException:
             logging.exception('Exception in connecting to scheduler.')
         if transport.isOpen():
             client.submit_links(self.links)
