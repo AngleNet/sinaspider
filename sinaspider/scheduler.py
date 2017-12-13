@@ -198,10 +198,12 @@ class SchedulerServiceClient(object):
         interval = SCHEDULER_CONFIG['client_failover_interval']
         while self.running:
             try:
+                links = self.queue.get()
+                # Need to close the connection later to avoid unparallel threading.
                 if not self.transport.isOpen():
                     self.transport.open()
-                links = self.queue.get()
                 self.client.submit_links(links)
+                self.transport.close()
                 logger.debug('Submit links: %s' % links)
             except TTransport.TTransportException:
                 logger.exception('Failed. Restarting in %s seconds' % interval)

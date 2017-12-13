@@ -35,5 +35,19 @@ A simple weibo spider which collects trending post messages.
 
 * When running multiple threads, the whole system will stuck if one thread among them is connected to the thrift server using socket. What is wrong with this?
     
-    No clue
+    ```python
+    def main():
+        client ...
+        transport ...
+        while True:
+            transport.open()
+            client.command...
+            transport.close()
+    
+    for i in range(3):
+        thread = threading.thread(target=main)
+        theadd.start()
+    ```
+    When we want all 3 threads running parallel, we need to close that transport.
+
 * I tested on a server with 16-core with a configuration of 10 downloaders and 6-process-engine. It can process 35 links/s.

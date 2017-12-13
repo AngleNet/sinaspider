@@ -58,6 +58,7 @@ class Downloader(threading.Thread):
                 self.user_identity = client.request_user_identity()
                 logger.debug('Get user identity: %s:%s' %
                              (self.user_identity.name, self.user_identity.pwd))
+                transport.close()
                 break
             except TTransport.TTransportException:
                 logger.exception(
@@ -70,8 +71,7 @@ class Downloader(threading.Thread):
                     transport.open()
                 self.links = client.grab_links(
                     DOWNLOADER_CONFIG['link_batch_size'])
-                if transport.isOpen():
-                    transport.close()
+                transport.close()
                 logger.debug('Grab links: %s' % self.links)
                 for _ in range(len(self.links)):
                     link = self.links[-1]
