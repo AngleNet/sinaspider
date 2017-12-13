@@ -137,7 +137,6 @@ class PipelineEngine(object):
         self.executor.shutdown()
         logger.info('Stopped.')
 
-
     def sig_handler(self, sig, func):
         """
         Handler for signal.SIGTERM. The handler shuts down the engine executor.

@@ -23,7 +23,7 @@ class SchedulerServiceHandler(scheduler_service.Iface):
 
     def __init__(self):
         self.logger = None
-    
+
     def init_logger(self):
         self.logger = logging.getLogger(self.__class__.__name__)
 
@@ -199,7 +199,8 @@ class SchedulerServiceClient(object):
         while self.running:
             try:
                 links = self.queue.get()
-                # Need to close the connection later to avoid unparallel threading.
+                # Need to close the connection later to avoid unparallel
+                # threading.
                 if not self.transport.isOpen():
                     self.transport.open()
                 self.client.submit_links(links)

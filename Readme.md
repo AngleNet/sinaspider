@@ -7,6 +7,19 @@ A simple weibo spider which collects trending post messages.
 ## Python
 ### Testing
 * [Pytest](https://docs.pytest.org/en/latest/example/simple.html): Testing framework
+
+    ```
+    @pytest.fixture(scope='session', autouse=True)
+    def init():
+        """
+        Initialize for testing. Called before all test starts.
+
+        See https://docs.pytest.org/en/latest/fixture.html
+        """
+        global initialization
+        yield None
+        # Tear down
+    ```
 * [Pytest introduction](http://pythontesting.net/framework/pytest/pytest-introduction/): Pytest tutorial
 * [Unit testing](https://jeffknupp.com/blog/2013/12/09/improve-your-python-understanding-unit-testing/): Good python unit test blog
 ### Coding style
@@ -51,3 +64,18 @@ A simple weibo spider which collects trending post messages.
     When we want all 3 threads running parallel, we need to close that transport.
 
 * I tested on a server with 16-core with a configuration of 10 downloaders and 6-process-engine. It can process 35 links/s.
+
+* How to debug multiprocessing programs?
+    
+    Using log as the following:
+    ```
+    Thread-1:
+        ...
+        logger.info('Thread-1 1')
+        ...
+        logger.info('Thread-1 2')
+        ...
+        logger.info('Thread-1 3')
+    ```
+
+* [Concurrent practice with Redis](https://eli.thegreenplace.net/2017/concurrent-servers-part-1-introduction/)
