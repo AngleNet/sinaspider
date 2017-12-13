@@ -22,6 +22,9 @@ class SchedulerServiceHandler(scheduler_service.Iface):
     """
 
     def __init__(self):
+        self.logger = None
+    
+    def init_logger(self):
         self.logger = logging.getLogger(self.__class__.__name__)
 
     def register_downloader(self, name):
@@ -114,8 +117,8 @@ class SchedulerServerDaemon(sinaspider.utils.Daemon, TServer.TServer):
             self, pidfile, self.__class__.__name__)
         self.host = SCHEDULER_CONFIG['addr']
         self.port = SCHEDULER_CONFIG['port']
-        handler = SchedulerServiceHandler()
-        processor = scheduler_service.Processor(handler)
+        self.handler = SchedulerServiceHandler()
+        processor = scheduler_service.Processor(self.handler)
         server_transport = TSocket.TServerSocket(self.host,
                                                  self.port)
         tfactory = TTransport.TBufferedTransportFactory()
@@ -129,6 +132,7 @@ class SchedulerServerDaemon(sinaspider.utils.Daemon, TServer.TServer):
         signal.signal(signal.SIGINT, self.sig_handler)
         sinaspider.log.configure_logger('.scheduler.log')
         logger = logging.getLogger(self.name)
+        self.handler.init_logger()
         self._is_alive = True
         interval = SCHEDULER_CONFIG['server_failover_interval']
         while self._is_alive:
