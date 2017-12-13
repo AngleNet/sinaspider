@@ -34,10 +34,12 @@ class Downloader(threading.Thread):
         self.user_identity = None           # user name and password
         self.loginer = SinaSessionLoginer(
             self.session)  # Login when session expired
-        self._stop_event = threading.Event() 
+        self.downloading = False 
+
     def run(self):
         logger = logging.getLogger(self.name)
         logger.info('Starting %s' % self.name)
+        self.downloading = True
         transport = TSocket.TSocket(SCHEDULER_CONFIG['addr'],
                                     SCHEDULER_CONFIG['port'])
         transport = TTransport.TBufferedTransport(
@@ -45,25 +47,7 @@ class Downloader(threading.Thread):
         protocol = TBinaryProtocol.TBinaryProtocol(
             transport)
         client = Client(protocol)
-        while not self._stop_event.is_set():
-            import time; time.sleep(2)
-            logger.info('pass')
-        logger.info('Downloader %s stopped' % self.name)
-
-    def _run(self):
-        """
-        Entry of the downloader. The main working loop.
-        """
-        logger = logging.getLogger(self.name)
-        logger.info('Starting %s' % self.name)
-        transport = TSocket.TSocket(SCHEDULER_CONFIG['addr'],
-                                    SCHEDULER_CONFIG['port'])
-        transport = TTransport.TBufferedTransport(
-            transport)
-        protocol = TBinaryProtocol.TBinaryProtocol(
-            transport)
-        client = Client(protocol)
-        while True:
+        while self.downloading:
             try:
                 logger.debug('Connecting scheduler_service %s' %
                               SCHEDULER_CONFIG['addr'])
@@ -76,8 +60,9 @@ class Downloader(threading.Thread):
                         (self.user_identity.name, self.user_identity.pwd))
                 break
             except TTransport.TTransportException:
-                logger.exception('Exception while initializing %s, reconecting...' % self.name)
-        while True:
+                logger.exception('Exception while initializing, reconecting...') 
+
+        while self.downloading:
             try:
                 if not transport.isOpen():
                     transport.open()
@@ -89,16 +74,19 @@ class Downloader(threading.Thread):
                     logger.debug('Downloading %s.' % link)
                     response = self._download(link)
                     if not response:
-                        break
+                        break # Exiting
                     import time; time.sleep(4)
                     del self.links[-1]
             except TTransport.TTransportException:
                 logger.exception('Exception in downloading loop: ')
+
         if transport.isOpen():
-            client.submit_links(self.links)
+            # TODO: submit uncrawled links to scheduler.
+            logger.debug('Unregiser downloader.')
             client.unregister_downloader(self.name)
+            logger.debug('Closing connection to scheduler.')
             transport.close()
-        logger.info('Downloader %s stopped.' % self.name)
+        logger.info('Downloader stopped.')
 
     def _download(self, link):
         """
@@ -108,7 +96,7 @@ class Downloader(threading.Thread):
         - link: A string of link to be downloaded.
         """
         logger = logging.getLogger(self.name)
-        while not self._stop_event.is_set():
+        while self.downloading:
             try:
                 response = self.session.get(link)
                 if self._is_login(response):
@@ -117,7 +105,7 @@ class Downloader(threading.Thread):
                 self.loginer.login(self.user_identity)
             except requests.RequestException:
                 logger.exception('Exception in downloading %s' % link)
-        return None
+        return None #Exiting
 
     def _is_login(self, response):
         """
@@ -126,5 +114,5 @@ class Downloader(threading.Thread):
         return True
 
     def stop(self):
-        self._stop_event.set() 
+        self.downloading = False
 
