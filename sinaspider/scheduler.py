@@ -187,31 +187,26 @@ class SchedulerServiceClient(object):
         self.transport = TTransport.TBufferedTransport(self.transport)
         protocol = TBinaryProtocol.TBinaryProtocol(self.transport)
         self.client = scheduler_service.Client(protocol)
+        self.running = False
 
     def run(self):
         """
         Start entry.
         """
-        interval = SCHEDULER_CONFIG['client_failover_interval']
         logger = logging.getLogger(self.name)
         logger.info('Starting %s' % self.name)
-        while True:
+        interval = SCHEDULER_CONFIG['client_failover_interval']
+        while self.running:
             try:
-                logger.debug('Connecting to scheduler_service %s' %
-                             SCHEDULER_CONFIG['addr'])
-                self.transport.open()
-                logger.debug('Conencted.')
-                while True:
-                    links = self.queue.get()
-                    if links is None:
-                        break
-                    self.client.submit_links(links)
-                    logger.debug('Submit links: %s' % links)
-                break
+                if not self.transport.isOpen():
+                    self.transport.open()
+                links = self.queue.get()
+                self.client.submit_links(links)
+                logger.debug('Submit links: %s' % links)
             except TTransport.TTransportException:
-                logger.exception('Exception in connecting to scheduler.')
+                logger.exception('Failed. Restarting in %s seconds' % interval)
+                time.sleep(interval)
         if self.transport.isOpen():
-            self.client.unregister_downloader(self.name)
             self.transport.close()
         logger.info('%s stopped.' % self.name)
 
@@ -222,4 +217,4 @@ class SchedulerServiceClient(object):
         """
         Stop the client.
         """
-        self.queue.put_nowait(None)
+        self.running = False

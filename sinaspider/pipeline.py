@@ -110,6 +110,7 @@ class PipelineEngine(object):
         self.scheduler_client_thread = threading.Thread(
             name='SchedulerServiceClient', target=self.scheduler_client.run)
         self.pipeline.register_scheduler_client(self.scheduler_client)
+        self.running = False
 
     def run(self):
         """
@@ -122,22 +123,24 @@ class PipelineEngine(object):
         logger.info('Starting scheduler client...')
         self.scheduler_client_thread.start()
         logger.info('Done. Running pipeline...')
-        while True:
+        self.running = True
+        while self.running:
             try:
                 response = self.pipeline.eat()
                 logger.debug('Processing %s' % str(response))
                 self.executor.submit(self.pipeline.start, response)
             except Exception:
                 logger.exception('Exception during submit %s' % str(response))
+        logger.info('Stopping scheduler client')
+        self.scheduler_client_thread.join()
+        logger.info('Stopping engine executor.')
+        self.executor.shutdown()
+        logger.info('Stopped.')
+
 
     def sig_handler(self, sig, func):
         """
         Handler for signal.SIGTERM. The handler shuts down the engine executor.
         """
-        logger = logging.getLogger(self.name)
-        self.executor.shutdown()
-        logger.info('Engine executor stopped.')
+        self.running = False
         self.scheduler_client.stop()
-        self.scheduler_client_thread.join()
-        logger.info('Scheduler service client stopped.')
-        os._exit(0)
