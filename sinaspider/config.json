@@ -18,7 +18,8 @@
         "addr": "221.207.30.251",
         "port": "9123",
         "alive": true,
-        "client_failover_interval": 3
+        "client_failover_interval": 3,
+        "server_failover_interval": 3
     },
     "TEST":{
         "_comment": "Unit testing configures",

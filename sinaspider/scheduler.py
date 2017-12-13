@@ -3,11 +3,11 @@ A simple scheduler.
 """
 
 import logging
-import multiprocessing
+import signal
+import time
 from thrift.protocol import TBinaryProtocol
 from thrift.transport import TTransport, TSocket
 from thrift.server import TServer
-import time
 
 import sinaspider.log
 import sinaspider.services.scheduler_service as scheduler_service
@@ -104,7 +104,7 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         return ttypes.RetStatus.SUCCESS
 
 
-class SchedulerServerDaemon(sinaspider.utils.Daemon):
+class SchedulerServerDaemon(sinaspider.utils.Daemon, TServer.TServer):
     """
     A Scheduler service server.
     """
@@ -113,30 +113,54 @@ class SchedulerServerDaemon(sinaspider.utils.Daemon):
         sinaspider.utils.Daemon.__init__(self, pidfile, self.__class__.__name__)
         self.host = SCHEDULER_CONFIG['addr']
         self.port = SCHEDULER_CONFIG['port']
+        handler = SchedulerServiceHandler()
+        processor = scheduler_service.Processor(handler)
+        server_transport = TSocket.TServerSocket(self.host,
+                                                 self.port)
+        tfactory = TTransport.TBufferedTransportFactory()
+        pfactory = TBinaryProtocol.TBinaryProtocolFactory()
+        TServer.TServer.__init__(self, processor, server_transport, 
+                                 tfactory, pfactory)
+        self._is_alive = False
 
     def run(self):
+        signal.signal(signal.SIGTERM, self.sig_handler)
+        signal.signal(signal.SIGINT, self.sig_handler)
         sinaspider.log.configure_logger('.scheduler.log')
-        self.logger = logging.getLogger(self.name)
-        while True:
-            self._run()
-            self.logger.warn('Restarting...')
+        logger = logging.getLogger(self.name)
+        self._is_alive = True
+        interval = SCHEDULER_CONFIG['server_failover_interval']
+        while self._is_alive:
+            try:
+                logger.info('Starting %s' % self.name)
+                logger.info('Serving requests...')
+                self.serverTransport.listen()
+                while self._is_alive:
+                    client = self.serverTransport.accept()
+                    if not client:
+                        continue
+                    itrans = self.inputTransportFactory.getTransport(client)
+                    otrans = self.outputTransportFactory.getTransport(client)
+                    iprot = self.inputProtocolFactory.getProtocol(itrans)
+                    oprot = self.outputProtocolFactory.getProtocol(otrans)
+                    try:
+                        while self._is_alive:
+                            self.processor.process(iprot, oprot)
+                    except TTransport.TTransportException:
+                        pass
+                    except Exception as e:
+                        logger.exception(e)
+                    itrans.close()
+                    otrans.close()
+            except Exception:
+                if self._is_alive:
+                    logger.exception('Failed. Restarting in %s seconds...' % interval)
+                    time.sleep(interval)
+        logger.info('Service stopped.')
 
-    def _run(self):
-        try:
-            self.logger.info('Starting %s' % self.name)
-            handler = SchedulerServiceHandler()
-            processor = scheduler_service.Processor(handler)
-            server_transport = TSocket.TServerSocket(self.host,
-                                                     self.port)
-            tfactory = TTransport.TBufferedTransportFactory()
-            pfactory = TBinaryProtocol.TBinaryProtocolFactory()
-            tserver = TServer.TSimpleServer(processor, server_transport,
-                                            tfactory, pfactory)
-            self.logger.info('Serving requests...')
-            tserver.serve()
-        except Exception:
-            self.logger.exception('%s failed accidently.' % self.name)
-       
+    def sig_handler(self, sig, func):
+        self._is_alive = False
+        self.serverTransport.close()
 
 
 class SchedulerServiceClient(object):
