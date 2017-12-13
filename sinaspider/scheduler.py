@@ -110,7 +110,8 @@ class SchedulerServerDaemon(sinaspider.utils.Daemon, TServer.TServer):
     """
 
     def __init__(self, pidfile):
-        sinaspider.utils.Daemon.__init__(self, pidfile, self.__class__.__name__)
+        sinaspider.utils.Daemon.__init__(
+            self, pidfile, self.__class__.__name__)
         self.host = SCHEDULER_CONFIG['addr']
         self.port = SCHEDULER_CONFIG['port']
         handler = SchedulerServiceHandler()
@@ -119,7 +120,7 @@ class SchedulerServerDaemon(sinaspider.utils.Daemon, TServer.TServer):
                                                  self.port)
         tfactory = TTransport.TBufferedTransportFactory()
         pfactory = TBinaryProtocol.TBinaryProtocolFactory()
-        TServer.TServer.__init__(self, processor, server_transport, 
+        TServer.TServer.__init__(self, processor, server_transport,
                                  tfactory, pfactory)
         self._is_alive = False
 
@@ -154,7 +155,9 @@ class SchedulerServerDaemon(sinaspider.utils.Daemon, TServer.TServer):
                     otrans.close()
             except Exception:
                 if self._is_alive:
-                    logger.exception('Failed. Restarting in %s seconds...' % interval)
+                    logger.exception(
+                        'Failed. Restarting in %s seconds...' %
+                        interval)
                     time.sleep(interval)
         logger.info('Service stopped.')
 
@@ -176,11 +179,11 @@ class SchedulerServiceClient(object):
         self.queue = queue
         self.name = self.__class__.__name__
         self.transport = TSocket.TSocket(SCHEDULER_CONFIG['addr'],
-         SCHEDULER_CONFIG['port'])
+                                         SCHEDULER_CONFIG['port'])
         self.transport = TTransport.TBufferedTransport(self.transport)
         protocol = TBinaryProtocol.TBinaryProtocol(self.transport)
         self.client = scheduler_service.Client(protocol)
-    
+
     def run(self):
         """
         Start entry.
@@ -191,7 +194,7 @@ class SchedulerServiceClient(object):
         while True:
             try:
                 logger.debug('Connecting to scheduler_service %s' %
-                                  SCHEDULER_CONFIG['addr'])
+                             SCHEDULER_CONFIG['addr'])
                 self.transport.open()
                 logger.debug('Conencted.')
                 while True:

@@ -18,8 +18,8 @@ from sinaspider.sina_login import SinaSessionLoginer
 
 class Downloader(threading.Thread):
     """
-    A simple downloader. The downloader starts, it grabs a batch of links from 
-    the master scheduler and starts to download the web page. When downloaded, 
+    A simple downloader. The downloader starts, it grabs a batch of links from
+    the master scheduler and starts to download the web page. When downloaded,
     call the finish callback. The downloader should do any redirects if needed.
     """
 
@@ -34,7 +34,7 @@ class Downloader(threading.Thread):
         self.user_identity = None           # user name and password
         self.loginer = SinaSessionLoginer(
             self.session)  # Login when session expired
-        self.downloading = False 
+        self.downloading = False
         self.pipeline = pipeline
 
     def run(self):
@@ -56,11 +56,12 @@ class Downloader(threading.Thread):
                 client.register_downloader(self.name)
                 logger.debug('Registered')
                 self.user_identity = client.request_user_identity()
-                logger.debug('Get user identity: %s:%s' % \
-                        (self.user_identity.name, self.user_identity.pwd))
+                logger.debug('Get user identity: %s:%s' %
+                             (self.user_identity.name, self.user_identity.pwd))
                 break
             except TTransport.TTransportException:
-                logger.exception('Exception while initializing, reconecting...') 
+                logger.exception(
+                    'Exception while initializing, reconecting...')
                 time.sleep(interval)
 
         while self.downloading:
@@ -77,7 +78,7 @@ class Downloader(threading.Thread):
                     logger.debug('Downloading %s.' % link)
                     response = self._download(link)
                     if not response:
-                        break # Exiting
+                        break  # Exiting
                     self.pipeline.feed(response)
                     del self.links[-1]
             except TTransport.TTransportException:
@@ -108,7 +109,7 @@ class Downloader(threading.Thread):
                 self.loginer.login(self.user_identity)
             except requests.RequestException:
                 logger.exception('Exception in downloading %s' % link)
-        return None #Exiting
+        return None  # Exiting
 
     def _is_login(self, response):
         """
@@ -118,4 +119,3 @@ class Downloader(threading.Thread):
 
     def stop(self):
         self.downloading = False
-

@@ -14,7 +14,7 @@ import sinaspider.log
 
 class PipelineNode(object):
     """
-    A pipeline node.  
+    A pipeline node.
 
     Subclass should call PipelineNode.__init__() at first.
     """
@@ -50,7 +50,7 @@ class PipelineNode(object):
 class Pipeline(object):
     """
     A pipeline is composed of a series of pipeline node. The downloader feed each
-    response to the pipeline, the response flow through the pipeline. 
+    response to the pipeline, the response flow through the pipeline.
     """
 
     def __init__(self, name, head, queue):
@@ -75,13 +75,13 @@ class Pipeline(object):
             self.head.start(self.scheduler_client, response)
         except Exception:
             logger.exception('Exception in pipeline.')
-    
+
     def eat(self):
         return self.queue.get()
-            
+
     def feed(self, response):
         self.queue.put(response)
-    
+
     def register_scheduler_client(self, client):
         self.scheduler_client = client
 
@@ -91,6 +91,7 @@ class PipelineEngine(object):
     A pipeline engine. The engine executes the pipeline by a process pool. Users
     should only feed inputs to the pipeline.
     """
+
     def __init__(self, pipeline, manager):
         """
         Input:
@@ -104,11 +105,12 @@ class PipelineEngine(object):
 
         self.executor = concurrent.futures.ProcessPoolExecutor(
             max_workers=PIPELINE_CONFIG['engine_pool_size'])
-        self.scheduler_client = sinaspider.scheduler.SchedulerServiceClient(queue)
+        self.scheduler_client = sinaspider.scheduler.SchedulerServiceClient(
+            queue)
         self.scheduler_client_thread = threading.Thread(
-                name='SchedulerServiceClient', target=self.scheduler_client.run)
+            name='SchedulerServiceClient', target=self.scheduler_client.run)
         self.pipeline.register_scheduler_client(self.scheduler_client)
-    
+
     def run(self):
         """
         Start entry.
@@ -127,7 +129,7 @@ class PipelineEngine(object):
                 self.executor.submit(self.pipeline.start, response)
             except Exception:
                 logger.exception('Exception during submit %s' % str(response))
-    
+
     def sig_handler(self, sig, func):
         """
         Handler for signal.SIGTERM. The handler shuts down the engine executor.
@@ -139,4 +141,3 @@ class PipelineEngine(object):
         self.scheduler_client_thread.join()
         logger.info('Scheduler service client stopped.')
         os._exit(0)
-

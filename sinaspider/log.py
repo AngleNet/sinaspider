@@ -30,6 +30,7 @@ _COLORERD_LOG_FMAT = {
     'CRITICAL': _COLOR_RED + '%s' + _COLOR_RESET,
 }
 
+
 class ColoredFormatter(logging.Formatter):
     """
     A colorful formatter.
@@ -45,6 +46,7 @@ class ColoredFormatter(logging.Formatter):
         level_name = record.levelname
         msg = logging.Formatter.format(self, record)
         return _COLORERD_LOG_FMAT.get(level_name, '%s') % msg
+
 
 def configure_logger(log_file_suffix):
     """
@@ -66,12 +68,13 @@ def configure_logger(log_file_suffix):
         stream_handler.setLevel(logging.DEBUG)
         stream_handler.setFormatter(stream_formatter)
         logger.addHandler(stream_handler)
-    log_path = os.path.join(dir_path, now+log_file_suffix)
+    log_path = os.path.join(dir_path, now + log_file_suffix)
     handler = logging.handlers.TimedRotatingFileHandler(log_path, when='D',
                                                         backupCount=7)
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     logger.setLevel(_getLevel(LOGGER_CONFIG['level']))
+
 
 def configure_listener_logger(log_path):
     """
@@ -79,7 +82,7 @@ def configure_listener_logger(log_path):
 
     Input:
     - log_path: A string of absolute log file path.
-    - when: A single character of 'S', 'M', 'H', 'D', 'W' to indicate how to split 
+    - when: A single character of 'S', 'M', 'H', 'D', 'W' to indicate how to split
             the log file by time interval.
 
             'S' : Seconds
@@ -91,7 +94,7 @@ def configure_listener_logger(log_path):
 
     Returns True if initialize the logger successfully.
     """
-    importlib.reload(logging) #Get a clean logging facility
+    importlib.reload(logging)  # Get a clean logging facility
     fmt = LOGGER_CONFIG['format']
     datefmt = LOGGER_CONFIG['datefmt']
     formatter = logging.Formatter(fmt, datefmt)

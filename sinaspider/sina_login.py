@@ -20,7 +20,8 @@ class ResponseUtils(object):
 
     @staticmethod
     def parseRedirectUrl(text):
-        return ResponseUtils.match('location\.replace\([\'"](.*?)[\'"]\)', text)
+        return ResponseUtils.match(
+            'location\.replace\([\'"](.*?)[\'"]\)', text)
 
     @staticmethod
     def match(pattern, text):
@@ -90,7 +91,8 @@ class SinaSessionLoginer(object):
         specified session.
         """
         self.user_identity = user_identity
-        # Phase one: Retrieve server time and public key for user identifier encryption.
+        # Phase one: Retrieve server time and public key for user identifier
+        # encryption.
         logger.info('Login Phase 1: retrieve server time and public key')
         res = self.session.get(self.prelogin_url)
         logger.debug('Get prelogin response: %s', res.text)
