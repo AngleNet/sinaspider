@@ -47,12 +47,11 @@ class Downloader(threading.Thread):
         protocol = TBinaryProtocol.TBinaryProtocol(
             transport)
         client = Client(protocol)
+        interval = SCHEDULER_CONFIG['client_failover_interval']
         while self.downloading:
             try:
-                logger.debug('Connecting scheduler_service %s' %
-                              SCHEDULER_CONFIG['addr'])
-                transport.open()
-                logger.debug('Connected.')
+                if not transport.isOpen():
+                    transport.open()
                 client.register_downloader(self.name)
                 logger.debug('Registered')
                 self.user_identity = client.request_user_identity()
@@ -61,6 +60,7 @@ class Downloader(threading.Thread):
                 break
             except TTransport.TTransportException:
                 logger.exception('Exception while initializing, reconecting...') 
+                time.sleep(interval)
 
         while self.downloading:
             try:
@@ -68,6 +68,8 @@ class Downloader(threading.Thread):
                     transport.open()
                 self.links = client.grab_links(
                     DOWNLOADER_CONFIG['link_batch_size'])
+                if transport.isOpen():
+                    transport.close()
                 logger.debug('Grab links: %s' % self.links)
                 for _ in range(len(self.links)):
                     link = self.links[-1]
