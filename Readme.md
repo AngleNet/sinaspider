@@ -32,3 +32,8 @@ A simple weibo spider which collects trending post messages.
 
 * Formatting:
     `autopep8 --in-place --recursive --aggressive`
+
+* When running multiple threads, the whole system will stuck if one thread among them is connected to the thrift server using socket. What is wrong with this?
+    
+    No clue
+* I tested on a server with 16-core with a configuration of 10 downloaders and 6-process-engine. It can process 35 links/s.

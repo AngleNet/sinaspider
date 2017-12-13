@@ -16,7 +16,8 @@ class FileWriter(PipelineNode):
         content = ''
         if response:
             content = "%s: %s" % (response.status_code, response.text[:20])
-        open('/tmp/writer', 'w+').write(content)
+        content += '\n'
+        open('/tmp/writer', 'a+').write(content)
 
 class SpiderPipeline(Pipeline):
     def __init__(self, queue):
@@ -25,4 +26,3 @@ class SpiderPipeline(Pipeline):
                 head, queue)
         writer = FileWriter()
         head.forward(writer)
-

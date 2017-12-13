@@ -100,7 +100,7 @@ class PipelineEngine(object):
         self.pipeline = pipeline
         self.manager = manager
         self.name = self.__class__.__name__
-        queue = manager.Queue(-1)
+        queue = self.manager.Queue(-1)
 
         self.executor = concurrent.futures.ProcessPoolExecutor(
             max_workers=PIPELINE_CONFIG['engine_pool_size'])

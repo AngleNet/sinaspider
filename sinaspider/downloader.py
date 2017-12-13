@@ -23,7 +23,7 @@ class Downloader(threading.Thread):
     call the finish callback. The downloader should do any redirects if needed.
     """
 
-    def __init__(self, name):
+    def __init__(self, name, pipeline):
         """
         Input:
         - name: A string of downloader name.
@@ -35,6 +35,7 @@ class Downloader(threading.Thread):
         self.loginer = SinaSessionLoginer(
             self.session)  # Login when session expired
         self.downloading = False 
+        self.pipeline = pipeline
 
     def run(self):
         logger = logging.getLogger(self.name)
@@ -77,7 +78,7 @@ class Downloader(threading.Thread):
                     response = self._download(link)
                     if not response:
                         break # Exiting
-                    import time; time.sleep(4)
+                    self.pipeline.feed(response)
                     del self.links[-1]
             except TTransport.TTransportException:
                 logger.exception('Exception in downloading loop: ')
