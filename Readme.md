@@ -38,7 +38,13 @@ A simple weibo spider which collects trending post messages.
     2. using `pip freeze`
 * Thrift 
 
-    `thrift --out . --gen py:newstyle services.thrift`
+    `thrift --out . --gen py:new_style services.thrift`
+
+    Issues:
+
+    1. class has no `__hash__`
+    2. need monkey patch `xrange`
+
 * Nice python libs:
 
     > multiprocessing, threading, concurrent, twisted

@@ -46,7 +46,7 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         if name not in self.downloaders:
             self.downloaders[name] = dict(proxies=list(), user_identity=None)
         else:
-            self.logger.warn('Downloader %s has been registered.')
+            self.logger.warn('Downloader %s has been registered.' % name)
         return ttypes.RetStatus.SUCCESS
 
     def unregister_downloader(self, name):
@@ -268,6 +268,7 @@ class SchedulerServiceClient(object):
         logger = logging.getLogger(self.name)
         logger.info('Starting %s' % self.name)
         interval = SCHEDULER_CONFIG['client_failover_interval']
+        self.running = True
         while self.running:
             try:
                 links = self.queue.get()

@@ -55,15 +55,17 @@ class Downloader(threading.Thread):
                     transport.open()
                 client.register_downloader(self.name)
                 logger.debug('Registered')
-                self.user_identity = client.request_user_identity()
-                logger.debug('Get user identity: %s:%s' %
-                             (self.user_identity.name, self.user_identity.pwd))
+                self.user_identity = client.request_user_identity(self.name)
+                logger.debug('Get user identity: %s' % self.user_identity)
                 transport.close()
                 break
             except TTransport.TTransportException:
                 logger.exception(
                     'Exception while initializing, reconecting...')
                 time.sleep(interval)
+            except Exception:
+                logger.exception('Failed while initialization, exitting...')
+                self.downloading = False 
 
         while self.downloading:
             try:
@@ -72,6 +74,10 @@ class Downloader(threading.Thread):
                 self.links = client.grab_links(
                     DOWNLOADER_CONFIG['link_batch_size'])
                 transport.close()
+                if len(self.links) == 0:
+                    logger.warn('No links available. Waiting...')
+                    time.sleep(interval)
+                    continue
                 logger.debug('Grab links: %s' % self.links)
                 for _ in range(len(self.links)):
                     link = self.links[-1]
@@ -82,7 +88,11 @@ class Downloader(threading.Thread):
                     self.pipeline.feed(response)
                     del self.links[-1]
             except TTransport.TTransportException:
-                logger.exception('Exception in downloading loop: ')
+                logger.exception('Connection error.')
+            except Exception:
+                logger.exception('Unkown failure, exiting...')
+                self.downloading = False
+
 
         if transport.isOpen():
             # TODO: submit uncrawled links to scheduler.

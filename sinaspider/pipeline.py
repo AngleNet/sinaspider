@@ -122,7 +122,7 @@ class PipelineEngine(object):
         logger = logging.getLogger(self.name)
         logger.info('Starting scheduler client...')
         self.scheduler_client_thread.start()
-        logger.info('Done. Running pipeline...')
+        logger.info('Running pipeline...')
         self.running = True
         while self.running:
             try:

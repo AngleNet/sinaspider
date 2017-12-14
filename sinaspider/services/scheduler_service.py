@@ -1129,7 +1129,7 @@ class grab_links_result(object):
         if ftype == TType.LIST:
           self.success = []
           (_etype3, _size0) = iprot.readListBegin()
-          for _i4 in xrange(_size0):
+          for _i4 in range(_size0):
             _elem5 = iprot.readString();
             self.success.append(_elem5)
           iprot.readListEnd()
@@ -1197,7 +1197,7 @@ class submit_links_args(object):
         if ftype == TType.LIST:
           self.links = []
           (_etype10, _size7) = iprot.readListBegin()
-          for _i11 in xrange(_size7):
+          for _i11 in range(_size7):
             _elem12 = iprot.readString();
             self.links.append(_elem12)
           iprot.readListEnd()
@@ -1584,7 +1584,7 @@ class submit_proxies_args(object):
         if ftype == TType.LIST:
           self.addrs = []
           (_etype17, _size14) = iprot.readListBegin()
-          for _i18 in xrange(_size14):
+          for _i18 in range(_size14):
             _elem19 = ProxyAddress()
             _elem19.read(iprot)
             self.addrs.append(_elem19)
