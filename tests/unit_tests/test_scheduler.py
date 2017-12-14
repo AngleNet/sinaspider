@@ -90,9 +90,7 @@ class TestSchedulerServiceHandler:
             _proxies.append(proxy)
             assert proxy in proxies
         for idx in range(int(num/2)):
-            proxy = self.handler.resign_proxy(_proxies[idx], self.downloaders[idx])
-            assert proxy not in _proxies
-            assert proxy in proxies
+            assert self.handler.resign_proxy(_proxies[idx], self.downloaders[idx]) == RetStatus.SUCCESS
             
 
     @staticmethod

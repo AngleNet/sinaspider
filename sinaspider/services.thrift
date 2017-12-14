@@ -1,5 +1,5 @@
 // Defines remote services.
-namespace py services
+namespace py sinaspider.services
 
 typedef i32 Integer
 
