@@ -20,6 +20,9 @@ class TestSchedulerServiceHandler:
             assert self.handler.unregister_downloader(downloader) == RetStatus.FAILED
 
     def test_user_identities(self):
+        """
+        Implemente dependent.
+        """
         user_identities = set()
         for ident in SCHEDULER_CONFIG['user_identity']:
             ident = UserIdentity(ident['name'], ident['pwd'])
@@ -28,12 +31,16 @@ class TestSchedulerServiceHandler:
         num_downloaders = len(self.downloaders)
         for idx in range(num_downloaders, num_users):
             self.downloaders.append('downloader-'+str(idx))
+        for idx in range(num_users):
+            self.handler.register_downloader(self.downloaders[idx])
         user_identities_copy = user_identities.copy()
         for idx in range(num_users):
             ident = user_identities_copy.pop()
             assert self.handler.request_user_identity(self.downloaders[idx]) == ident
         for idx in range(num_users, 2*num_users):
-            self.downloaders.append('downloader-'+str(idx))
+            name = 'downloader-' + str(idx)
+            self.handler.register_downloader(name)
+            self.downloaders.append(name)
         user_identities_copy = user_identities.copy()
         for idx in range(num_users, int(1.3*num_users)):
             ident = user_identities_copy.pop()
@@ -42,10 +49,6 @@ class TestSchedulerServiceHandler:
         for idx in range(num_users, int(1.3*num_users)):
             ident = user_identities_copy.pop()
             assert self.handler.resign_user_identity(ident, self.downloaders[idx]) == RetStatus.SUCCESS
-        user_identities_copy = user_identities.copy()
-        for idx in range(num_users, int(1.3*num_users)):
-            ident = user_identities_copy.pop()
-            assert self.handler.request_user_identity(self.downloaders[idx]) == ident
             
     def test_links(self):
         linkss = list()
@@ -79,6 +82,8 @@ class TestSchedulerServiceHandler:
         num_downloaders = len(self.downloaders)
         for idx in range(num_downloaders, num):
             self.downloaders.append('downloader-'+str(idx))
+        for idx in range(num):
+            self.handler.register_downloader(self.downloaders[idx])
         _proxies = list()
         for idx in range(int(num/2)):
             proxy = self.handler.request_proxy(self.downloaders[idx])

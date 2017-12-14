@@ -20,6 +20,7 @@
         "alive": true,
         "client_failover_interval": 3,
         "server_failover_interval": 3,
+        "proxy_max_try": 5,
         "user_identity":[
             {
                 "name": "atropos_spider1@sina.com",

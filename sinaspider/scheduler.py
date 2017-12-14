@@ -43,16 +43,31 @@ class SchedulerServiceHandler(scheduler_service.Iface):
          - name
         """
         self.logger.debug('Register %s' % name)
+        if name not in self.downloaders:
+            self.downloaders[name] = dict(proxies=list(), user_identity=None)
+        else:
+            self.logger.warn('Downloader %s has been registered.')
         return ttypes.RetStatus.SUCCESS
 
     def unregister_downloader(self, name):
         """
-        Unregister the named downloader.
+        Unregister the named downloader. Reclaim all of resources of the downloader.
 
         Parameters:
          - name
         """
         self.logger.debug('Unregister downloader %s' % name)
+        if name not in self.downloaders:
+            self.logger.warn('Unregister a never registered downloader: %s' % name)
+            return ttypes.RetStatus.FAILED
+        for proxy in self.downloaders[name]['proxies']:
+            self.logger.debug('Reclaim proxy: %s' % str(proxy))
+            self.idle_proxies.add(proxy)
+        user = self.downloaders[name]['user_identity']
+        if user:
+            self.user_identities.add(user)
+            self.logger.debug('Reclaim user identity: %s' % str(user))
+        del self.downloaders[name]
         return ttypes.RetStatus.SUCCESS
 
     def request_user_identity(self, name):
@@ -60,7 +75,19 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         Get a pair of user name and password. For now, each pair of user name and
         password can only be granted to exactly one downloader.
         """
-        return ttypes.UserIdentity('test', 'password')
+        ident = self.downloaders[name]['user_identity']
+        if self.downloaders[name]['user_identity']:
+            self.logger.warn('%s already has %s. Remind it.' % (name, ident))
+            return ident
+        if len(self.user_identities) == 0:
+            self.logger.warn('User identity exhausted. Start over.')
+            for ident in SCHEDULER_CONFIG['user_identity']:
+                ident = ttypes.UserIdentity(ident['name'], ident['pwd'])
+                self.user_identities.add(ident)
+        ident = self.user_identities.pop() 
+        self.downloaders[name]['user_identity'] = ident
+        self.logger.debug('Allocate %s for %s' % (ident, name))
+        return ident 
 
     def resign_user_identity(self, pair, name):
         """
@@ -69,6 +96,12 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         Parameters:
          - pair
         """
+        ident = self.downloaders[name]['user_identity']
+        if ident != pair:
+            self.logger.warn('%s try to resign %s not owned by itself.' % (name, pair))
+            return ttypes.RetStatus.FAILED
+        self.user_identities.add(pair)
+        self.logger.debug('%s renounces %s' % (name, pair))
         return ttypes.RetStatus.SUCCESS
 
     def grab_links(self, size):
@@ -79,7 +112,15 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         Parameters:
          - size
         """
-        return ['http://www.tldp.org/HOWTO/3-Button-Mouse-1.html']
+        ret_links = []
+        if len(self.links) <= size:
+            ret_links = self.links
+            self.links = []
+        else:
+            for _ in range(size):
+                ret_links.append(self.links.pop(0))
+        self.logger.info('%s links left' % len(self.links))
+        return ret_links
 
     def submit_links(self, links):
         """
@@ -88,23 +129,40 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         Parameters:
          - links
         """
+        self.links.extend(links)
+        self.logger.debug('Receive %s links' % len(links))
         return ttypes.RetStatus.SUCCESS
 
     def request_proxy(self, name):
         """
         Request a living proxy.
+
         """
-        return ttypes.ProxyAddress('221.207.30.251', 80)
+        proxies = self.downloaders[name]['proxies']
+        if len(self.idle_proxies) == 0:
+            self.logger.warn('Proxies are exhausted. Start over')
+            self.idle_proxies = self.proxies.copy()
+        proxy = self.idle_proxies.pop()
+        if proxy not in proxies:
+            proxies.append(proxy)
+        self.logger.debug('Allocate %s for %s' % (proxy, name))
+        self.logger.info('%s proxies left.' % len(self.idle_proxies))
+        return proxy
 
     def resign_proxy(self, addr, name):
         """
         Resign a proxy. If a downloader find out the proxy is dead, tell the scheduler.
-        The scheduler will give it a new one.
 
         Parameters:
          - addr
         """
-        return ttypes.ProxyAddress('test_addr', 80)
+        proxies = self.downloaders[name]['proxies']
+        if addr not in proxies:
+            self.logger.warn('%s try to resign %s not owned by itself' % (name, addr))
+            return ttypes.RetStatus.FAILED
+        proxies.remove(addr)
+        self.idle_proxies.add(addr)
+        return ttypes.RetStatus.SUCCESS
 
     def submit_proxies(self, addrs):
         """
@@ -113,6 +171,11 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         Parameters:
          - addrs
         """
+        self.logger.debug('Receive %s proxies' % len(addrs))
+        for addr in addrs:
+            self.idle_proxies.add(addr)
+            self.proxies.add(addr)
+        self.logger.debug('%s proxies in total' % len(self.proxies))
         return ttypes.RetStatus.SUCCESS
 
 

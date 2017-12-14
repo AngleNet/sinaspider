@@ -67,9 +67,8 @@ service scheduler_service{
 
     /**
      * Resign a proxy. If a downloader find out the proxy is dead, tell the scheduler.
-     * The scheduler will give it a new one.
      */
-    ProxyAddress resign_proxy(1: required ProxyAddress addr, 2: required string name),
+    RetStatus resign_proxy(1: required ProxyAddress addr, 2: required string name),
 
     /**
      * Submit a batch of proxies to scheduler.
