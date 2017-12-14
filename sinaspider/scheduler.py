@@ -23,9 +23,17 @@ class SchedulerServiceHandler(scheduler_service.Iface):
 
     def __init__(self):
         self.logger = None
-
-    def init_logger(self):
+        self.links = list() # Keep all of links
+        self.downloaders = dict() # Keep alive downloaders along with other resources
+        self.user_identities = set() # Keep unused user identities
+        self.idle_proxies = set() # Keep idle proxies
+        self.proxies = set() # Keeps all of proxies
+    
+    def init(self):
         self.logger = logging.getLogger(self.__class__.__name__)
+        for ident in SCHEDULER_CONFIG['user_identity']:
+            ident = ttypes.UserIdentity(ident['name'], ident['pwd'])
+            self.user_identities.add(ident)
 
     def register_downloader(self, name):
         """
@@ -34,7 +42,7 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         Parameters:
          - name
         """
-        self.logger.debug('Register downloader %s' % name)
+        self.logger.debug('Register %s' % name)
         return ttypes.RetStatus.SUCCESS
 
     def unregister_downloader(self, name):
@@ -47,14 +55,14 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         self.logger.debug('Unregister downloader %s' % name)
         return ttypes.RetStatus.SUCCESS
 
-    def request_user_identity(self, ):
+    def request_user_identity(self, name):
         """
         Get a pair of user name and password. For now, each pair of user name and
         password can only be granted to exactly one downloader.
         """
         return ttypes.UserIdentity('test', 'password')
 
-    def resign_user_identity(self, pair):
+    def resign_user_identity(self, pair, name):
         """
         Give up the user identity.
 
@@ -67,6 +75,7 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         """
         Grab a batch of links.
 
+        In FIFO order.
         Parameters:
          - size
         """
@@ -81,13 +90,13 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         """
         return ttypes.RetStatus.SUCCESS
 
-    def request_proxy(self, ):
+    def request_proxy(self, name):
         """
         Request a living proxy.
         """
         return ttypes.ProxyAddress('221.207.30.251', 80)
 
-    def resign_proxy(self, addr):
+    def resign_proxy(self, addr, name):
         """
         Resign a proxy. If a downloader find out the proxy is dead, tell the scheduler.
         The scheduler will give it a new one.
@@ -132,7 +141,7 @@ class SchedulerServerDaemon(sinaspider.utils.Daemon, TServer.TServer):
         signal.signal(signal.SIGINT, self.sig_handler)
         sinaspider.log.configure_logger('.scheduler.log')
         logger = logging.getLogger(self.name)
-        self.handler.init_logger()
+        self.handler.init()
         self._is_alive = True
         interval = SCHEDULER_CONFIG['server_failover_interval']
         while self._is_alive:

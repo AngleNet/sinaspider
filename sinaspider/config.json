@@ -19,7 +19,69 @@
         "port": "9123",
         "alive": true,
         "client_failover_interval": 3,
-        "server_failover_interval": 3
+        "server_failover_interval": 3,
+        "user_identity":[
+            {
+                "name": "atropos_spider1@sina.com",
+                "pwd": "passward"
+            },
+            {
+                "name": "atropos_spider2@sina.com",
+                "pwd": "passward"
+            },
+            {
+                "name": "atropos_spider3@sina.com",
+                "pwd": "passward"
+            },
+            {
+                "name": "atropos_spider4@sina.com",
+                "pwd": "passward"
+            },
+            {
+                "name": "atropos_spider5@sina.com",
+                "pwd": "passward"
+            },
+            {
+                "name": "atropos_spider6@sina.com",
+                "pwd": "passward"
+            },
+            {
+                "name": "atropos_spider7@sina.com",
+                "pwd": "passward"
+            },
+            {
+                "name": "atropos_spider8@sina.com",
+                "pwd": "passward"
+            },
+            {
+                "name": "atropos_spider9@sina.com",
+                "pwd": "passward"
+            },
+            {
+                "name": "atropos_spider10@sina.com",
+                "pwd": "passward"
+            },
+            {
+                "name": "atropos_spider11@sina.com",
+                "pwd": "passward"
+            },
+            {
+                "name": "atropos_spider12@sina.com",
+                "pwd": "passward"
+            },
+            {
+                "name": "atropos_spider13@sina.com",
+                "pwd": "passward"
+            },
+            {
+                "name": "atropos_spider14@sina.com",
+                "pwd": "passward"
+            },
+            {
+                "name": "atropos_spider15@sina.com",
+                "pwd": "passward"
+            }
+        ]
     },
     "TEST":{
         "_comment": "Unit testing configures",

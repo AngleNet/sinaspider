@@ -43,12 +43,12 @@ service scheduler_service{
      * Get a pair of user name and password. For now, each pair of user name and 
      * password can only be granted to exactly one downloader.
      */
-    UserIdentity request_user_identity(),
+    UserIdentity request_user_identity(1: required string name),
 
     /**
      * Give up the user identity.
      */
-    RetStatus resign_user_identity(1: required UserIdentity pair),
+    RetStatus resign_user_identity(1: required UserIdentity pair, 2: required string name),
 
     /**
      * Grab a batch of links.
@@ -63,13 +63,13 @@ service scheduler_service{
     /**
      * Request a living proxy.
      */
-    ProxyAddress request_proxy(),
+    ProxyAddress request_proxy(1: required string name),
 
     /**
      * Resign a proxy. If a downloader find out the proxy is dead, tell the scheduler.
      * The scheduler will give it a new one.
      */
-    ProxyAddress resign_proxy(1: required ProxyAddress addr),
+    ProxyAddress resign_proxy(1: required ProxyAddress addr, 2: required string name),
 
     /**
      * Submit a batch of proxies to scheduler.
