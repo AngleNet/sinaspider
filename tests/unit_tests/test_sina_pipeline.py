@@ -49,6 +49,7 @@ class SinaPipelineDummy(Pipeline):
         router.forward(prelist)
         router.forward(puinfo)
         router.forward(puweibo)
+
     
 class TestSpiderPipeline:
     pipeline = None
@@ -84,11 +85,11 @@ class TestSpiderPipeline:
     def test_user_weibo_processor(self):
         pass
     
+    def test_user_info_html_parser(self):
+        res = self.session.get('https://weibo.com/2876831014/info')
+        page = decode_response_text(res)
+        user = SinaUser()
+        user_info_html_parser(page, user)
+
     def teardown_class(cls):
         cls.pipeline = None
-
-
-        
-        
-
-
