@@ -137,3 +137,6 @@ class Daemon:
         called after the process has been daemonized by start() or restart().
         """
         pass
+
+class UnimplementedException(Exception):
+    pass

@@ -83,5 +83,19 @@ A simple weibo spider which collects trending post messages.
         ...
         logger.info('Thread-1 3')
     ```
+* Singleton:
+
+    ```python
+    class SingletonExample(object):
+        _instance = None
+        def __new__(cls):
+            if not SingletonExample._instance:
+                SingletonExample._instance = super(SingletonExample, cls).__new__(cls)
+                super(SingletonExample, SingletonExample._instance).__init__(SingletonExample._instance)
+                # Customization code goes here
+            return SingletonExample._instance
+        # Never use __init__ to init.
+    ```
+    Python use `__new__` to create an instance and use `__init__` to customize it.
 
 * [Concurrent practice with Redis](https://eli.thegreenplace.net/2017/concurrent-servers-part-1-introduction/)

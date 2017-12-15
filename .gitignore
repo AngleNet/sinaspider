@@ -1,4 +1,4 @@
-.env/
+.sina_env/
 .cache/
 *.pyc
 *.pyo

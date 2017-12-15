@@ -6,11 +6,14 @@
     ],
     "python.unitTest.pyTestEnabled": true,
     "python.unitTest.nosetestsEnabled": false,
-    "python.pythonPath": "${workspaceRoot}\\.env\\Scripts\\python.exe",
+    "python.pythonPath": "${workspaceRoot}/.sina_env/Scripts/python.exe",
+    "python.unitTest.pyTestPath": "${workspaceRoot}/.sina_env/Scripts/pytest.exe",
     "spellright.language": "en",
     "spellright.documentTypes": [
         "markdown",
         "latex",
         "plaintext"
-    ]
+    ],
+    "python.unitTest.unittestEnabled": true,
+    "python.venvPath": "${workspaceRoot}"
 }

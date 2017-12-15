@@ -43,8 +43,9 @@ class PipelineNode(object):
         Runs current node.
         """
         kws = self.run(client, *kws)
-        for child in self.children:
-            child.start(client, *kws)
+        if kws: # Empty response. Exit the pipeline 
+            for child in self.children:
+                child.start(client, *kws)
 
 
 class Pipeline(object):

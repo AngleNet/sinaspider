@@ -54,11 +54,11 @@ class SinaSessionLoginer(object):
         Return a dict of encrypted user identification for login.
         """
         user_name_base64 = base64.encodebytes(
-            self.user_identity.user_name.encode('utf-8'))[:-1]
+            self.user_identity.name.encode('utf-8'))[:-1]
         pubkey = int(pubkey, 16)
         key = rsa.PublicKey(pubkey, 65537)
         message = str(server_time) + '\t' + str(nonce) + '\n' + \
-            str(self.user_identity.password)  # 拼接明文加密文件中得到
+            str(self.user_identity.pwd)  # 拼接明文加密文件中得到
         passwd = rsa.encrypt(message.encode('utf-8'), key)  # 加密
         passwd = binascii.b2a_hex(passwd)
         ret = {
