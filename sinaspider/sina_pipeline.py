@@ -24,7 +24,11 @@ _USER_TWEETS_LINKS = {
                 '&pre_page=%s&pagebar=%s&id=%s&domain_op=%s'
 }
 _USER_INFO_LINK = 'http://www.weibo.com/p/%s/info'
-_TRENDING_TWEETS_LINK = 'http://www.d.weibo.com'    # Scheduler seed.
+_TRENDING_TWEETS_LINK = 'https://d.weibo.com/p/aj/v6/mblog/mbloglist?ajwvr=6'
+                        '&domain=102803_ctg1_1760_-_ctg1_1760&pagebar=0&tab=home'
+                        '&current_page=1&pre_page=1&page=1&pl_name=Pl_Core_NewMixFeed__3'
+                        '&id=102803_ctg1_1760_-_ctg1_1760&script_uri=/&feed_type=1'
+                        '&domain_op=102803_ctg1_1760_-_ctg1_1760'    # Scheduler seed.
 _RETWEET_LINKS = 'https://www.weibo.com/aj/v6/mblog/info/big?ajwvr=6&id=%s&page=%s&ouid=%s'
 _USER_HOME_LINK = {
     'id': 'http://www.weibo.com/u/%s',
@@ -96,9 +100,6 @@ class SinaFlow(Serializable):
     def __repr__(self):
         L = '%s->%r' % (self.a, self.b)
         return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
-
-    def __hash__(self):
-        return hash((self.a, self.b))
 
 
 ### Pipeline definitions
@@ -187,8 +188,9 @@ class TrendingWeiboProcessor(PipelineNode):
             tweets, flows = tweet_page_parser(content)
             for tweet in tweets:
                 if tweet.num_reposts > 0:
-                    link = _RETWEET_LINKS % (tweet.tid, 1)
+                    link = _RETWEET_LINKS % (tweet.tid, 1, tweet.uid)
                     links.add(link)
+                    link = _USER_HOME_LINK['id'] % tweet.uid
             for flow in flows:
                 if type(flow.a) is int:
                     link = _USER_HOME_LINK['id'] % flow.a
