@@ -3,11 +3,34 @@ import aenum
 from bs4 import BeautifulSoup
 import json
 import logging
+from os.path import dirname, join, abspath
 import pickle
+import plyvel
 import re
 import urllib.parse
 
 from sinaspider.pipeline import Pipeline, PipelineNode
+
+### Links
+_USER_TWEETS_LINKS = {
+    'top_page': 'https://www.weibo.com/p/aj/v6/mblog/mbloglist?ajwvr=6&domain=%s'
+                '&is_search=0&visible=0&is_all=1&is_tag=0&profile_ftype=1&page=%s&'
+                'id=%s&feed_type=0&domain_op=%s',
+    'mid_page': 'https://www.weibo.com/p/aj/v6/mblog/mbloglist?ajwvr=6&domain=%s'
+                '&is_search=0&visible=0&is_all=1&is_tag=0&profile_ftype=1&page=%s'
+                'pre_page=%s&pagebar=%s&id=%s&domain_op=%s',
+    'bot_page': 'https://www.weibo.com/p/aj/v6/mblog/mbloglist?ajwvr=6&domain=%s'
+                '&is_search=0&visible=0&is_all=1&is_tag=0&profile_ftype=1&page=%s'
+                '&pre_page=%s&pagebar=%s&id=%s&domain_op=%s'
+}
+_USER_INFO_LINK = 'http://www.weibo.com/p/%s/info'
+_TRENDING_TWEETS_LINK = 'http://www.d.weibo.com'    # Scheduler seed.
+_RETWEET_LINKS = 'https://www.weibo.com/aj/v6/mblog/info/big?ajwvr=6&id=%s&page=%s&ouid=%s'
+_USER_HOME_LINK = {
+    'id': 'http://www.weibo.com/u/%s',
+    'nick': 'http://www.weibo.com/n/%s'
+}
+
 
 ### Data Structures
 
@@ -36,6 +59,7 @@ class SinaUser(Serializable):
         self.is_certified = False
         self.homepage = ''
         self.labels = ''
+        self.page_id = ''
     
     def __repr__(self):
         L = ['%s=%r' % (key, value)
@@ -46,8 +70,10 @@ class SinaTweet(Serializable):
     def __init__(self):
         self.tid = 0 # Tweet ID
         self.uid = 0 
+        self.otid = 0 # Origin
+        self.ouid = 0
         self.content = ''
-        self.time = ''
+        self.time = 0
         self.coordinates = ''
         self.platform = '' # Phone type or PC?
         self.num_comments = 0
@@ -60,16 +86,19 @@ class SinaTweet(Serializable):
         return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
 
 
-class SinaRelation(Serializable):
+class SinaFlow(Serializable):
     def __init__(self):
         """
-        Relation a->b.
+        A flow from a to b.
         """
         self.a = ''
         self.b = ''
     def __repr__(self):
         L = '%s->%r' % (self.a, self.b)
         return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __hash__(self):
+        return hash((self.a, self.b))
 
 
 ### Pipeline definitions
@@ -89,65 +118,35 @@ class SinaResponse(object):
     def __repr__(self):
         return '<%s, %s>' % (self.type, self.response)
 
-class TrendingWeiboProcessor(PipelineNode):
-    def __init__(self):
-        PipelineNode.__init__(self, self.__class__.__name__)
-
-    def run(self, client, response):
-        if response.type != SinaResponseType.TRENDING_WEIBO:
-            return None
-        response = response.response
-        links = []
-        logger = logging.getLogger(self.name)
-        try:
-            content = decode_response_text(response)
-            assert type(content) == type(dict())
-        except Exception:
-            logger.exception('Exception while handling %s' % debug_str_response(response))
-            response = None # Exiting
-        return (response, )
-
-class RepostListProcessor(PipelineNode):
-    def __init__(self):
-        PipelineNode.__init__(self, self.__class__.__name__)
-
-    def run(self, client, response):
-        if response.type != SinaResponseType.REPOST_LIST:
-            return None
-        return (response, )
-
-class UserInfoProcessor(PipelineNode):
-    def __init__(self):
-        PipelineNode.__init__(self, self.__class__.__name__)
-    
-    def run(self, client, response):
-        response = response.response
-        links = []
-        logger = logging.getLogger(self.name)
-        try:
-            content = decode_response_text(response)
-            user = SinaUser()
-            user_info_html_parser(content, user)
-        except Exception:
-            logger.exception('')
-        return (user, )
-
-
-class UserWeiboProcessor(PipelineNode):
-    def __init__(self):
-        PipelineNode.__init__(self, self.__class__.__name__)
-    
-    def run(self, client, response):
-        if response.type != SinaResponseType.USER_WEIBO:
-            return None
-        response = response.response
-        links = []
-        logger = logging.getLogger(self.name)
-        try:
-            content = decode_response_text(response)
-        except Exception:
-            logger.exception('')
-        return (response, )
+class SinaPipeline(Pipeline):
+    """
+    The Pipeline seems like:
+             +-----+      ---->TrendingWeiboProcessor--->LevelDBWriter
+             |  R  |     / 
+     ------->|  O  +----/  --->UserWeiboProcessor--->LevelDBWriter
+     Response|  U  +------/
+     ------->|  T  +---------->UserInfoprocessor--->LevelDBWriter
+             |  E  +----+
+             |  R  |     \---->RepostListProcessor--->LevelDBWriter
+             +-----+
+    """
+    def __init__(self, queue):
+        router = Router()
+        Pipeline.__init__(self, self.__class__.__name__,
+                          router, queue)
+        wtlevdb = LevelDBWriter()
+        ptrweibo = TrendingWeiboProcessor()
+        ptrweibo.forward(wtlevdb)
+        prelist = RepostListProcessor()
+        prelist.forward(wtlevdb)
+        puinfo = UserInfoProcessor()
+        puinfo.forward(wtlevdb)
+        puweibo = UserWeiboProcessor()
+        puweibo.forward(wtlevdb)
+        router.forward(ptrweibo)
+        router.forward(prelist)
+        router.forward(puinfo)
+        router.forward(puweibo)
 
 class Router(PipelineNode):
     def __init__(self):
@@ -167,15 +166,181 @@ class Router(PipelineNode):
                 response.type = SinaResponseType.USER_WEIBO
         return (response,)
         
-        
+
+class TrendingWeiboProcessor(PipelineNode):
+    def __init__(self):
+        PipelineNode.__init__(self, self.__class__.__name__)
+
+    def run(self, client, response):
+        if response.type != SinaResponseType.TRENDING_WEIBO:
+            return None
+        response = response.response
+        links = set()
+        logger = logging.getLogger(self.name)
+        try:
+            content_json = decode_response_text(response)
+            assert type(content_json) == type(dict())
+            if content_json['code'] != '100000':
+                logger.debug('%s failed.' % response.url)
+                return # Failed, need retry.
+            content = strip_text_wight_blank(content_json['data'])
+            tweets, flows = tweet_page_parser(content)
+            for tweet in tweets:
+                if tweet.num_reposts > 0:
+                    link = _RETWEET_LINKS % (tweet.tid, 1)
+                    links.add(link)
+            for flow in flows:
+                if type(flow.a) is int:
+                    link = _USER_HOME_LINK['id'] % flow.a
+                elif type(flow.a) is str:
+                    link = _USER_HOME_LINK['nick'] % flow.a
+                link = urllib.parse.quote(link)
+                links.add(link)
+                if type(flow.b) is int:
+                    link = _USER_HOME_LINK['id'] % flow.b
+                elif type(flow.b) is str:
+                    link = _USER_HOME_LINK['nick'] % flow.b
+                link = urllib.parse.quote(link)
+                links.add(link)
+        except Exception:
+            logger.exception('Exception while handling %s' % debug_str_response(response))
+            response = None # Exiting
+        return (tweets, flows, links)
+
+class RepostListProcessor(PipelineNode):
+    def __init__(self):
+        PipelineNode.__init__(self, self.__class__.__name__)
+
+    def run(self, client, response):
+        if response.type != SinaResponseType.REPOST_LIST:
+            return None
+        response = response.response
+        links = set()
+        logger = logging.getLogger(self.name)
+        try:
+            content_json = decode_response_text(response)
+            assert type(content_json) == type(dict())
+            if content_json['code'] != '100000':
+                logger.debug('%s failed.' % response.url)
+                return # Failed, need retry.
+            content = strip_text_wight_blank(content_json['data'])
+            tweets, flows = retweet_list_page_parser(content)
+            for flow in flows:
+                if type(flow.a) is int:
+                    link = _USER_HOME_LINK['id'] % flow.a
+                elif type(flow.a) is str:
+                    link = _USER_HOME_LINK['nick'] % flow.a
+                link = urllib.parse.quote(link)
+                links.add(link)
+                if type(flow.b) is int:
+                    link = _USER_HOME_LINK['id'] % flow.b
+                elif type(flow.b) is str:
+                    link = _USER_HOME_LINK['nick'] % flow.b
+                link = urllib.parse.quote(link)
+                links.add(link)
+        except Exception:
+            logger.exception('Exception while handling %s' % debug_str_response(response))
+            response = None # Exiting
+        return (tweets, flows, links)
 
 
-class SinaPipeline(Pipeline):
-    def __init__(self, queue):
-        router = Router()
-        Pipeline.__init__(self, self.__class__.__name__,
-                          router, queue)
+        return (response, )
 
+class UserInfoProcessor(PipelineNode):
+    def __init__(self):
+        PipelineNode.__init__(self, self.__class__.__name__)
+    
+    def run(self, client, response):
+        if response.type != SinaResponseType.USER_INFO:
+            return None
+        response = response.response
+        links = []
+        logger = logging.getLogger(self.name)
+        try:
+            content = decode_response_text(response)
+            user = SinaUser()
+            user_info_html_parser(content, user)
+            user.homepage = response.url
+        except Exception:
+            logger.exception('Exception while handling %s' % debug_str_response(response))
+        return (user, )
+
+
+class UserWeiboProcessor(PipelineNode):
+    def __init__(self):
+        PipelineNode.__init__(self, self.__class__.__name__)
+    
+    def run(self, client, response):
+        if response.type != SinaResponseType.USER_WEIBO:
+            return None
+        response = response.response
+        links = set()
+        logger = logging.getLogger(self.name)
+        try:
+            content_json = decode_response_text(response)
+            assert type(content_json) == type(dict())
+            if content_json['code'] != '100000':
+                logger.debug('%s failed.' % response.url)
+                return # Failed, need retry.
+            content = strip_text_wight_blank(content_json['data'])
+            tweets, flows = tweet_page_parser(content)
+            for tweet in tweets:
+                if tweet.num_reposts > 0:
+                    link = _RETWEET_LINKS % (tweet.tid, 1)
+                    links.add(link)
+            for flow in flows:
+                if type(flow.a) is int:
+                    link = _USER_HOME_LINK['id'] % flow.a
+                elif type(flow.a) is str:
+                    link = _USER_HOME_LINK['nick'] % flow.a
+                link = urllib.parse.quote(link)
+                links.add(link)
+                if type(flow.b) is int:
+                    link = _USER_HOME_LINK['id'] % flow.b
+                elif type(flow.b) is str:
+                    link = _USER_HOME_LINK['nick'] % flow.b
+                link = urllib.parse.quote(link)
+                links.add(link)
+        except Exception:
+            logger.exception('Exception while handling %s' % debug_str_response(response))
+            response = None # Exiting
+        return (tweets, flows, links)
+
+class LevelDBWriter(PipelineNode):
+    def __init__(self):
+        PipelineNode.__init__(self, self.__class__.__name__)
+        self.db_dir = join(dirname(dirname(abspath(__file__))), 'data')
+        self.db_name_map = {
+            'SinaTweet': 'tweets.db',
+            'SinaUser': 'users.db',
+            'SinaFlow': 'flows.db'
+        }
+    
+    def run(self, client, *kws):
+        if not kws:
+            return
+        logger = logging.getLogger(self.name)
+        for entries in *kws:
+            if not entries:
+                continue
+            entry = entries.pop()
+            db_name = self.db_name_map.get(entry.__class__.__name__, 'error.db')
+            db = plyvel.DB(join(self.db_dir, db_name), create_if_missing=True) 
+            wb = db.write_batch()
+            if type(entry) is SinaFlow:
+                wb.put(pickle.dumps(entry.a), pickle.dumps(entry.b))
+                for entry in entries:
+                    wb.put(pickle.dumps(entry.a), pickle.dumps(entry.b))
+            elif type(entry) is SinaUser:
+                wb.put(pickle.dumps(entry.uid), entry.serialize())
+                for entry in entries:
+                    wb.put(pickle.dumps(entry.uid), entry.serialize())
+            elif type(entry) is SinaTweet:
+                wb.put(pickle.dumps(entry.tid), entry.serialize())
+                for entry in entries:
+                    wb.put(pickle.dumps(entry.tid), entry.serialize())
+            wb.write()
+            db.close()
 
 ### Utility functions 
 
@@ -195,10 +360,8 @@ def decode_response_text(response):
     if content_type == 'application/json':
         ret = json.loads(ret)
         # Default is 'text/html'
-    ret = re.sub(r'(\\r)|(\\n)|(\r)|(\\t)', '', ret)
-    ret = re.sub(r'\\/', '/', ret)
-    ret = re.sub(r'\\"', '"', ret)
-    ret = re.sub('&nbsp;', '', ret)
+    elif content_type == 'text/html':
+        ret = strip_text_wight_blank(ret)
     return ret
 
 def debug_str_response(response):
@@ -221,7 +384,16 @@ def debug_str_response(response):
     }
     return str(ret)
 
-# User parser utility
+def strip_text_wight_blank(text):
+    text = re.sub(r'(\\r)|(\\n)|(\r)|(\\t)', '', text)
+    text = re.sub(r'\\/', '/', text)
+    text = re.sub(r'\\"', '"', text)
+    text = re.sub('&nbsp;', '', text)
+    return text
+ 
+
+# Html parser
+
 def user_info_html_parser(html, user):
     config_box = ''
     number_box = ''
@@ -237,6 +409,12 @@ def user_info_html_parser(html, user):
         for value in config_box.split(';'):
             if "['oid']" in value:
                 user.id = value.split("'")[-2]
+            elif "['page_id']" in value:
+                user.page_id = value.split("'")[-2]
+            elif "['sex']" in value:
+                user.gender = value.split("'")[-2]
+            elif "['onick']" in value:
+                user.nick_name = value.split("'")[-2]
     if number_box:
         number_box = extract_html_from_script(number_box)
         script = BeautifulSoup(number_box, 'lxml')
@@ -263,25 +441,164 @@ def user_info_html_parser(html, user):
                 for label_box in item.find_all('a'):
                     user.label += label_box.contents[0] + ';'
 
-# Trending weibo
-def trending_weibo_html_parser(response):
+def tweet_page_parser(html):
     """
-    Return a list of SinaTweets 
+    Returns a list of tweets along with their path. The returned tweet only contains
+    its own content.
     """
-    return list()
+    tweets = []
+    flows = []
+    ouidp = re.compile(r'(ouid=([0-9]*))')
+    rouidp = re.compile(r'(rouid=([0-9]*))')
+    box = BeautifulSoup(html, 'lxml')
+    for wrap_box in box.find_all('div', 'WB_cardwrap'):
+        if 'mid' not in wrap_box.attrs or wrap_box.find('div', 'WB_cardtitle_b'):
+            #Bypass mysterious box
+            continue
+        tweet_box = wrap_box.find('div', 'WB_detail')
+        if tweet_box.find('a', ignore='ignore'):
+            continue
+        is_forward = wrap_box.attrs.get('isForward', False)
+        tweet = SinaTweet()
+        tweet.tid = wrap_box.attrs.get('mid', 0)
+        tbinfo = wrap_box.attrs.get('tbinfo', '')
+        if tbinfo:
+            uid = ouidp.match(tbinfo)
+            tweet.uid = uid.groups()[1]
+        flow = tweet_box_parser(tweet_box, tweet)
+        hanle_box = wrap_box.find('div', 'WB_handle')
+        tweet_handle_box_parser(hanle_box, tweet)
+        if is_forward:
+            otweet = SinaTweet()
+            otweet.tid = wrap_box.attrs.get('omid', 0)
+            if tbinfo:
+                ouid = rouidp.match(tbinfo)
+                otweet.uid = ouid.groups()[1]
+            otweet_box = tweet_box.find('div', 'WB_expand')
+            tweet_box_parser(otweet_box, otweet)
+            tweet.otid = otweet.tid
+            tweet.ouid = otweet.uid
+            f = SinaFlow()
+            f.a = otweet.tid
+            if flow:
+                f.b = flow[0].a
+            else:
+                f.b = tweet.uid
+            flow.append(f)
+            handle_box = otweet_box.find('div', 'WB_handle')
+            tweet_handle_box_parser(handle_box, otweet)
+        tweets.append(tweet)
+        tweets.append(otweet)
+        flows.extend(flow)
+    return (tweets, flows)
 
-# Repost list 
-def repost_list_html_parser(response):
+def tweet_box_parser(box, tweet):
     """
-    Return a list of SinaTweets
-    """
-    return list()
+    Parse the input tweet box and fill the field of the input tweet. 
 
-# User weibo
-def user_weibo_html_parser(response):
+    Return a list Relations of the retweeting path.
     """
-    Return a list of SinaTweets
+    path = []
+    from_box = box.find('div', 'WB_from')
+    tweet_from_box_parser(from_box, tweet)
+    text_box = box.find('div', 'WB_text')
+    bypass = False
+    for inner in text_box.contents:
+        if inner.name == 'img':
+            continue
+        elif inner.name == 'a':
+            bypass = True
+            path.append(inner.get_text()[1:])
+        elif inner.name is None and not bypass:
+            tweet.content += inner
+    flows = []
+    if path:
+        flow = SinaFlow()
+        flow.a = path.pop()
+        for _ in range(path):
+            e = path.pop()
+            flow.b = e
+            flows.append(flow)
+            flow = SinaFlow()
+            flow.a = e
+        flow.b = tweet.uid
+        flows.append(flow)
+    return flows
+
+def tweet_from_box_parser(box, tweet):
+    for inner in box.find_all('a'):
+        _date = inner.attrs.get('date', '')
+        if _date:
+            tweet.time = int(inner.attrs.get('date')[:11])
+            break
+        action_type = inner.attrs.get('action_type', '')
+        if action_type == 'app_source':
+            tweet.platform = inner.get_text()
+ 
+
+def tweet_handle_box_parser(box, tweet):
     """
+    Parse number of retweets, comments, loves.
+    """
+    p = re.compile('[0-9]+')
+    for inner in box.find_all('a'):
+        action_type = inner.attrs('action_type', '')
+        if action_type == 'fl_forward':
+            em = inner.find('em', text=p)
+            tweet.num_reposts = int(em.get_text())
+        elif action_type == 'fl_comment':
+            em = inner.find('em', text=p)
+            tweet.num_comments = int(em.get_text())
+        elif action_type == 'fl_like':
+            em = inner.find('em', text=p)
+            tweet.num_loves = int(em.get_text())
+
+def retweet_list_page_parser(html, otid, ouid):
+    """
+    Return a list tweets along with retweeting relations.
+    """
+    tweets = []
+    flows = []
+    uidp = re.compile(r'(id=([0-9]+))')
+    box = BeautifulSoup(html, 'lxml')
+    for tweet_box in box.find_all(attrs={'action-type':'feed_list_item'}):
+        tweet = SinaTweet()
+        tweet.tid = int(tweet_box.attrs.get('mid', 0))
+        tweet.otid = otid
+        tweet.ouid = ouid
+        face_box = tweet_box.find('div', 'WB_face')
+        uid = uidp.match(face_box.a.attrs.get('usercard', '')
+        tweet.uid = int(uid.groups()[1])
+        from_box = tweet_box.find('div', 'WB_from')
+        tweet_from_box_parser(from_box, tweet)
+        text_box = tweet_box.find(attrs={'node-type':'text'})
+        bypass = False
+        path = []
+        for inner in text_box.contents:
+            if inner.name == 'img':
+                continue
+            elif inner.name == 'a':
+                bypass = True
+                path.append(inner.get_text()[1:])
+            elif inner.name is None and not bypass:
+                tweet.content += inner
+        if path:
+            flow = SinaFlow()
+            flow.a = ouid
+            for _ in range(path):
+                e = path.pop()
+                flow.b = e
+                flows.append(flow)
+                flow = SinaFlow()
+                flow.a = e
+            flow.b = tweet.uid
+            flows.append(flow)
+        else:
+            flow = SinaFlow()
+            flow.a = ouid
+            flow.b = tweet.uid
+        tweets.append(tweet)
+    return (tweets, flows)
 
 # Others
 def extract_html_from_script(script):
