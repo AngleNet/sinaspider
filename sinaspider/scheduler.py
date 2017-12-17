@@ -3,6 +3,9 @@ A simple scheduler.
 """
 
 import logging
+from os.path import abspath, dirname, join
+import pickle
+import plyvel
 import signal
 import time
 from thrift.protocol import TBinaryProtocol
@@ -23,17 +26,25 @@ class SchedulerServiceHandler(scheduler_service.Iface):
 
     def __init__(self):
         self.logger = None
-        self.links = list() # Keep all of links
+        self.num_links = 0
         self.downloaders = dict() # Keep alive downloaders along with other resources
         self.user_identities = set() # Keep unused user identities
         self.idle_proxies = set() # Keep idle proxies
         self.proxies = set() # Keeps all of proxies
+        self.ready_links_generator = None
+        self._link_batch_size = 0
+        self.ready_links_db = None
+        self.dead_links_db = None
     
     def init(self):
         self.logger = logging.getLogger(self.__class__.__name__)
         for ident in SCHEDULER_CONFIG['user_identity']:
             ident = ttypes.UserIdentity(ident['name'], ident['pwd'])
             self.user_identities.add(ident)
+        db_dir = join(dirname(dirname(abspath(__file__))), 'database')
+        self.ready_links_db = plyvel.DB(join(db_dir, 'ready_links.db'), create_if_missing=True)
+        self.dead_links_db = plyvel.DB(join(db_dir, 'dead_links.db'), create_if_missing=True)
+        self.ready_links_generator = self._ready_links_generator()
 
     def register_downloader(self, name):
         """
@@ -112,15 +123,15 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         Parameters:
          - size
         """
-        ret_links = []
-        if len(self.links) <= size:
-            ret_links = self.links
-            self.links = []
-        else:
-            for _ in range(size):
-                ret_links.append(self.links.pop(0))
-        self.logger.info('%s links left' % len(self.links))
-        return ret_links
+        self._link_batch_size = size
+        links = self.ready_links_generator()
+        for link in links:
+            klink = pickle.dumps(link)
+            self.dead_links_db.put(klink, b'')
+            self.ready_links_db.delete(klink)
+        self.num_links -= len(links)
+        self.logger.info('%s links left' % self.num_links)
+        return links
 
     def submit_links(self, links):
         """
@@ -129,7 +140,14 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         Parameters:
          - links
         """
-        self.links.extend(links)
+        count = 0
+        for link in links:
+            klink = pickle.dumps(link)
+            if self.dead_links_db.get(klink):
+                continue
+            self.ready_links_db.put(klink, b'')
+            count += 1
+        self.num_links += count
         self.logger.debug('Receive %s links' % len(links))
         return ttypes.RetStatus.SUCCESS
 
@@ -177,6 +195,26 @@ class SchedulerServiceHandler(scheduler_service.Iface):
             self.proxies.add(addr)
         self.logger.debug('%s proxies in total' % len(self.proxies))
         return ttypes.RetStatus.SUCCESS
+
+    ## Utility methods
+    def _ready_links_generator(self):
+        """
+        Return a link
+        """
+        while True:
+            snapshot = self.ready_links_db.snapshot()
+            with snapshot.iterator() as it:
+                count = 0
+                links = []
+                for k, v in it:
+                    count += 1
+                    links.append(pickle.loads(k))
+                    if count >= self._link_batch_size:
+                        yield links
+                        links = []
+                        count = 0
+            snapshot.close()
+
 
 
 class SchedulerServerDaemon(sinaspider.utils.Daemon, TServer.TServer):
@@ -286,8 +324,9 @@ class SchedulerServiceClient(object):
             self.transport.close()
         logger.info('%s stopped.' % self.name)
 
-    def submit_links(self, link):
-        self.queue.put(link)
+    def submit_links(self, links):
+        for link in links:
+            self.queue.put(link)
 
     def stop(self):
         """

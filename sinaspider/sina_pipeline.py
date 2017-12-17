@@ -24,15 +24,15 @@ _USER_TWEETS_LINKS = {
                 '&pre_page=%s&pagebar=%s&id=%s&domain_op=%s'
 }
 _USER_INFO_LINK = 'http://www.weibo.com/p/%s/info'
-_TRENDING_TWEETS_LINK = 'https://d.weibo.com/p/aj/v6/mblog/mbloglist?ajwvr=6'
-                        '&domain=102803_ctg1_1760_-_ctg1_1760&pagebar=0&tab=home'
-                        '&current_page=1&pre_page=1&page=1&pl_name=Pl_Core_NewMixFeed__3'
-                        '&id=102803_ctg1_1760_-_ctg1_1760&script_uri=/&feed_type=1'
+_TRENDING_TWEETS_LINK = 'https://d.weibo.com/p/aj/v6/mblog/mbloglist?ajwvr=6'\
+                        '&domain=102803_ctg1_1760_-_ctg1_1760&pagebar=0&tab=home'\
+                        '&current_page=1&pre_page=1&page=1&pl_name=Pl_Core_NewMixFeed__3'\
+                        '&id=102803_ctg1_1760_-_ctg1_1760&script_uri=/&feed_type=1'\
                         '&domain_op=102803_ctg1_1760_-_ctg1_1760'    # Scheduler seed.
 _RETWEET_LINKS = 'https://www.weibo.com/aj/v6/mblog/info/big?ajwvr=6&id=%s&page=%s&ouid=%s'
 _USER_HOME_LINK = {
-    'id': 'http://www.weibo.com/u/%s',
-    'nick': 'http://www.weibo.com/n/%s'
+    'id': 'REDIRECT:http://www.weibo.com/u/%s',
+    'nick': 'REDIRECT:http://www.weibo.com/n/%s'
 }
 
 
@@ -186,11 +186,6 @@ class TrendingWeiboProcessor(PipelineNode):
                 return # Failed, need retry.
             content = strip_text_wight_blank(content_json['data'])
             tweets, flows = tweet_page_parser(content)
-            for tweet in tweets:
-                if tweet.num_reposts > 0:
-                    link = _RETWEET_LINKS % (tweet.tid, 1, tweet.uid)
-                    links.add(link)
-                    link = _USER_HOME_LINK['id'] % tweet.uid
             for flow in flows:
                 if type(flow.a) is int:
                     link = _USER_HOME_LINK['id'] % flow.a
@@ -204,6 +199,7 @@ class TrendingWeiboProcessor(PipelineNode):
                     link = _USER_HOME_LINK['nick'] % flow.b
                 link = urllib.parse.quote(link)
                 links.add(link)
+                client.submit_links(links)
         except Exception:
             logger.exception('Exception while handling %s' % debug_str_response(response))
             response = None # Exiting
@@ -217,6 +213,11 @@ class RepostListProcessor(PipelineNode):
         if response.type != SinaResponseType.REPOST_LIST:
             return None
         response = response.response
+        res_parse = urllib.parse.urlparse(response.url)
+        dic_query = urllib.parse.parse_qs(res_parse['query'])
+        otid = int(dic_query['id'][0])
+        ouid = int(dic_query['ouid'][0])
+        cnt_page = int(dic_query['page'][0])
         links = set()
         logger = logging.getLogger(self.name)
         try:
@@ -225,8 +226,9 @@ class RepostListProcessor(PipelineNode):
             if content_json['code'] != '100000':
                 logger.debug('%s failed.' % response.url)
                 return # Failed, need retry.
-            content = strip_text_wight_blank(content_json['data'])
-            tweets, flows = retweet_list_page_parser(content)
+            total_pages = content_json['data']['page']['totalpage']
+            content = strip_text_wight_blank(content_json['data']['html'])
+            tweets, flows = retweet_list_page_parser(content, otid, ouid)
             for flow in flows:
                 if type(flow.a) is int:
                     link = _USER_HOME_LINK['id'] % flow.a
@@ -240,13 +242,14 @@ class RepostListProcessor(PipelineNode):
                     link = _USER_HOME_LINK['nick'] % flow.b
                 link = urllib.parse.quote(link)
                 links.add(link)
+            for idx in range(2, total_pages+1):
+                link = _RETWEET_LINKS % (otid, idx, ouid)
+                link.add(link)
+            client.submit_links(links)
         except Exception:
             logger.exception('Exception while handling %s' % debug_str_response(response))
             response = None # Exiting
-        return (tweets, flows, links)
-
-
-        return (response, )
+        return (tweets, flows)
 
 class UserInfoProcessor(PipelineNode):
     def __init__(self):
@@ -256,13 +259,18 @@ class UserInfoProcessor(PipelineNode):
         if response.type != SinaResponseType.USER_INFO:
             return None
         response = response.response
-        links = []
+        url_path = response.url.split('?')[0]
+        url_home = url_path[:-5]
         logger = logging.getLogger(self.name)
         try:
             content = decode_response_text(response)
+            content = strip_text_wight_blank(content)
             user = SinaUser()
+            user.homepage = url_home
             user_info_html_parser(content, user)
-            user.homepage = response.url
+            domain = user.page_id[:6]
+            link = _USER_TWEETS_LINKS['top_page'] % (domain, 1, user.uid, domain)
+            client.submit_links([link,])
         except Exception:
             logger.exception('Exception while handling %s' % debug_str_response(response))
         return (user, )
@@ -276,20 +284,29 @@ class UserWeiboProcessor(PipelineNode):
         if response.type != SinaResponseType.USER_WEIBO:
             return None
         response = response.response
-        links = set()
+        res_parse = urllib.parse.urlparse(response.url)
+        dic_query = urllib.parse.parse_qs(res_parse['query'])
+        domain = int(dic_query['domain'][0])
+        uid = int(dic_query['id'][0])
+        cnt_page = int(dic_query['page'][0])
+        domain_op = int(dic_query['domain_op'][0])
+        page_bar = int(dic_query.get('pagebar', '[-1]')[0])
+
+        tweets = list()
+        flows = list()
         logger = logging.getLogger(self.name)
         try:
+            links = set()
             content_json = decode_response_text(response)
             assert type(content_json) == type(dict())
             if content_json['code'] != '100000':
                 logger.debug('%s failed.' % response.url)
                 return # Failed, need retry.
             content = strip_text_wight_blank(content_json['data'])
-            tweets, flows = tweet_page_parser(content)
-            for tweet in tweets:
-                if tweet.num_reposts > 0:
-                    link = _RETWEET_LINKS % (tweet.tid, 1)
-                    links.add(link)
+            paging_info = False
+            if cnt_page == 1 and page_bar == 1:
+                paging_info = True
+            tweets, flows, pages = tweet_page_parser(content, paging_info)
             for flow in flows:
                 if type(flow.a) is int:
                     link = _USER_HOME_LINK['id'] % flow.a
@@ -303,15 +320,23 @@ class UserWeiboProcessor(PipelineNode):
                     link = _USER_HOME_LINK['nick'] % flow.b
                 link = urllib.parse.quote(link)
                 links.add(link)
+            for idx in range(2, pages+1):
+                link = _USER_TWEETS_LINKS['top_page'] % (domain, idx, uid, domain)
+                links.add(link)
+                link = _USER_TWEETS_LINKS['mid_page'] % (domain, idx, idx, 0, uid, domain)
+                links.add(link)
+                link = _USER_TWEETS_LINKS['bot_page'] % (domain, idx, idx, 1, uid, domain)
+                links.add(link)
+            client.submit_links(links)
         except Exception:
             logger.exception('Exception while handling %s' % debug_str_response(response))
             response = None # Exiting
-        return (tweets, flows, links)
+        return (tweets, flows)
 
 class LevelDBWriter(PipelineNode):
     def __init__(self):
         PipelineNode.__init__(self, self.__class__.__name__)
-        self.db_dir = join(dirname(dirname(abspath(__file__))), 'data')
+        self.db_dir = join(dirname(dirname(abspath(__file__))), 'database')
         self.db_name_map = {
             'SinaTweet': 'tweets.db',
             'SinaUser': 'users.db',
@@ -443,13 +468,14 @@ def user_info_html_parser(html, user):
                 for label_box in item.find_all('a'):
                     user.label += label_box.contents[0] + ';'
 
-def tweet_page_parser(html):
+def tweet_page_parser(html, paging_info=False):
     """
     Returns a list of tweets along with their path. The returned tweet only contains
     its own content.
     """
     tweets = []
     flows = []
+    pages = 0
     ouidp = re.compile(r'(ouid=([0-9]*))')
     rouidp = re.compile(r'(rouid=([0-9]*))')
     box = BeautifulSoup(html, 'lxml')
@@ -492,7 +518,7 @@ def tweet_page_parser(html):
         tweets.append(tweet)
         tweets.append(otweet)
         flows.extend(flow)
-    return (tweets, flows)
+    return (tweets, flows, pages)
 
 def tweet_box_parser(box, tweet):
     """
