@@ -99,3 +99,7 @@ A simple weibo spider which collects trending post messages.
     Python use `__new__` to create an instance and use `__init__` to customize it.
 
 * [Concurrent practice with Redis](https://eli.thegreenplace.net/2017/concurrent-servers-part-1-introduction/)
+
+* Running Go:
+
+    Set up go: [Go wiki](https://github.com/golang/go/wiki/Ubuntu)

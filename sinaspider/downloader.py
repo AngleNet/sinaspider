@@ -87,6 +87,7 @@ class Downloader(threading.Thread):
                         break  # Exiting
                     self.pipeline.feed(response)
                     del self.links[-1]
+                    time.sleep(5)
             except TTransport.TTransportException:
                 logger.exception('Connection error.')
             except Exception:
@@ -112,11 +113,11 @@ class Downloader(threading.Thread):
         logger = logging.getLogger(self.name)
         while self.downloading:
             try:
-                # Link Hack
-                if 'REDIRECT' == link[:9]:
-                    res = self.session.head(link[9:])
-                    link = res.url + '/info'
                 response = self.session.get(link)
+                if 'https://weibo.com/sorry?sysbusy' in response.url:
+                    logger.debug('Too fast. Waiting...')
+                    time.sleep(DOWNLOADER_CONFIG['sysbusy_wait_latency'])
+                    continue
                 if self._is_login(response):
                     return response
                 logger.info('Session expired. Relogin...')

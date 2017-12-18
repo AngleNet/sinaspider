@@ -6,3 +6,4 @@ log/
 *.pid
 html/
 .env/
+database/

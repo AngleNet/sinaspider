@@ -28,7 +28,6 @@ class SchedulerServiceHandler(scheduler_service.Iface):
 
     def __init__(self):
         self.logger = None
-        self.num_links = 0
         self.downloaders = dict() # Keep alive downloaders along with other resources
         self.user_identities = set() # Keep unused user identities
         self.idle_proxies = set() # Keep idle proxies
@@ -37,19 +36,31 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         self._link_batch_size = 0
         self.ready_links_db = None
         self.dead_links_db = None
+        self._db_dir = join(dirname(dirname(abspath(__file__))), 'database')
+        if not isdir(self._db_dir):
+            os.makedirs(self._db_dir)
+        try:
+            pf = open(join(self._db_dir, 'link_numbers'), 'r')
+            self.num_links = int(pf.read().strip())
+            pf.close()
+        except Exception:
+            self.num_links = 0
     
     def init(self):
         self.logger = logging.getLogger(self.__class__.__name__)
         for ident in SCHEDULER_CONFIG['user_identity']:
             ident = ttypes.UserIdentity(ident['name'], ident['pwd'])
             self.user_identities.add(ident)
-        db_dir = join(dirname(dirname(abspath(__file__))), 'database')
-        if not isdir(db_dir):
-            os.makedirs(db_dir)
-        self.ready_links_db = plyvel.DB(join(db_dir, 'ready_links.db'), create_if_missing=True)
-        self.dead_links_db = plyvel.DB(join(db_dir, 'dead_links.db'), create_if_missing=True)
+        self.ready_links_db = plyvel.DB(join(self._db_dir, 'ready_links.db'), create_if_missing=True)
+        self.dead_links_db = plyvel.DB(join(self._db_dir, 'dead_links.db'), create_if_missing=True)
         self.ready_links_generator = self._ready_links_generator()
+        total_links = self.ready_links_db.get(b'total_links')
+        if total_links:
+            self.num_links = pickle.loads(total_links)
+
     def close(self):
+        with open(join(self._db_dir, 'link_numbers'), 'w+') as fd:
+            fd.write('%s\n' % self.num_links)
         self.ready_links_db.close()
         self.dead_links_db.close()
 
@@ -151,11 +162,13 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         for link in links:
             klink = pickle.dumps(link)
             if self.dead_links_db.get(klink) == b'' or self.ready_links_db.get(klink) == b'':
+                self.logger.debug('bypass: %s' % link)
                 continue
             self.ready_links_db.put(klink, b'')
             count += 1
+        self.logger.debug(links)
         self.num_links += count
-        self.logger.debug('Receive %s links' % len(links))
+        self.logger.debug('Receive %s links' % count)
         return ttypes.RetStatus.SUCCESS
 
     def request_proxy(self, name):
@@ -335,8 +348,7 @@ class SchedulerServiceClient(object):
         logger.info('%s stopped.' % self.name)
 
     def submit_links(self, links):
-        for link in links:
-            self.queue.put(link)
+        self.queue.put(links)
 
     def stop(self):
         """

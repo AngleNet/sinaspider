@@ -42,10 +42,14 @@ class PipelineNode(object):
         """
         Runs current node.
         """
-        kws = self.run(client, *kws)
-        if kws: # Empty response. Exit the pipeline 
-            for child in self.children:
-                child.start(client, *kws)
+        try:
+            kws = self.run(client, *kws)
+            if kws: # Empty response. Exit the pipeline 
+                for child in self.children:
+                    child.start(client, *kws)
+        except Exception:
+            logger = logging.getLogger(self.name)
+            logger.exception('Pipeline node exception.')
 
 
 class Pipeline(object):

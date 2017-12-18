@@ -82,6 +82,31 @@ class SinaSessionLoginer(object):
         }
         return ret
 
+    def _request_cookies(self):
+        name = base64.b64encode(self.user_identity.name.encode("utf-8")).decode("utf-8")
+        postData = {
+                    "entry": "sso",
+                    "gateway": "1",
+                    "from": "null",
+                    "savestate": "30",
+                    "useticket": "0",
+                    "pagerefer": "",
+                    "vsnf": "1",
+                    "su": name,
+                    "service": "sso",
+                    "sp": self.user_identity.pwd,
+                    "sr": "1440*900",
+                    "encoding": "UTF-8",
+                    "cdult": "3",
+                    "domain": "sina.com.cn",
+                    "prelt": "0",
+                    "returntype": "TEXT",
+                }
+        res = self.session.post(self.login_url, data=postData)
+        jsonStr = res.content.decode("gbk")
+        info = json.loads(jsonStr)
+        return info['retcode'] == '0'
+
     def login(self, user_identity):
         """
         Login via the specified user identity and store the cookies to the
@@ -89,6 +114,8 @@ class SinaSessionLoginer(object):
         """
         logger = logging.getLogger(self.__class__.__name__)
         self.user_identity = user_identity
+        if self._request_cookies():
+            return
         # Phase one: Retrieve server time and public key for user identifier
         # encryption.
         logger.info('Login Phase 1: retrieve server time and public key')

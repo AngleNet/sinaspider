@@ -24,7 +24,7 @@ _USER_TWEETS_LINKS = {
                 '&is_search=0&visible=0&is_all=1&is_tag=0&profile_ftype=1&page=%s'
                 '&pre_page=%s&pagebar=%s&id=%s&domain_op=%s'
 }
-_USER_INFO_LINK = 'http://www.weibo.com/p/%s/info'
+_USER_INFO_LINK = 'http://www.weibo.com/p/%s/info?home=%s'
 _TRENDING_TWEETS_LINK = 'https://d.weibo.com/p/aj/v6/mblog/mbloglist?ajwvr=6'\
                         '&domain=102803_ctg1_1760_-_ctg1_1760&pagebar=0&tab=home'\
                         '&current_page=1&pre_page=1&page=1&pl_name=Pl_Core_NewMixFeed__3'\
@@ -32,8 +32,8 @@ _TRENDING_TWEETS_LINK = 'https://d.weibo.com/p/aj/v6/mblog/mbloglist?ajwvr=6'\
                         '&domain_op=102803_ctg1_1760_-_ctg1_1760'    # Scheduler seed.
 _RETWEET_LINKS = 'https://www.weibo.com/aj/v6/mblog/info/big?ajwvr=6&id=%s&page=%s&ouid=%s'
 _USER_HOME_LINK = {
-    'id': 'REDIRECT:http://www.weibo.com/u/%s',
-    'nick': 'REDIRECT:http://www.weibo.com/n/%s'
+    'id': 'http://www.weibo.com/u/%s',
+    'nick': 'http://www.weibo.com/n/%s'
 }
 
 
@@ -99,8 +99,8 @@ class SinaFlow(Serializable):
         self.a = ''
         self.b = ''
     def __repr__(self):
-        L = '%s->%r' % (self.a, self.b)
-        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+        L = '%s-->%r' % (self.a, self.b)
+        return '%s(%s)' % (self.__class__.__name__, L)
 
 
 ### Pipeline definitions
@@ -109,6 +109,7 @@ class SinaResponseType(aenum.Enum):
     REPOST_LIST = aenum.auto()  # weibo.com/aj/v6/mblog/info/big
     USER_INFO= aenum.auto()     # weibo.com/p/1005052840177141/info 
     USER_WEIBO = aenum.auto()   # weibo.com/p/aj/v6/mblog/mbloglist
+    USER_HOME = aenum.auto()    # user homepage. Get page_id
 
     UNDEFINED = aenum.auto()    
 
@@ -129,8 +130,9 @@ class SinaPipeline(Pipeline):
      Response|  U  +------/
      ------->|  T  +---------->UserInfoprocessor--->LevelDBWriter
              |  E  +----+
-             |  R  |     \---->RepostListProcessor--->LevelDBWriter
-             +-----+
+             |  R  +--+  \---->RepostListProcessor--->LevelDBWriter
+             |     |   \
+             +-----+    \----->UserHomePageProcessor
     """
     def __init__(self, queue):
         router = Router()
@@ -145,10 +147,12 @@ class SinaPipeline(Pipeline):
         puinfo.forward(wtlevdb)
         puweibo = UserWeiboProcessor()
         puweibo.forward(wtlevdb)
+        puhome = UserHomePageProcessor()
         router.forward(ptrweibo)
         router.forward(prelist)
         router.forward(puinfo)
         router.forward(puweibo)
+        router.forward(puhome)
 
 class Router(PipelineNode):
     def __init__(self):
@@ -164,11 +168,13 @@ class Router(PipelineNode):
         elif url.netloc == 'weibo.com':
             if 'mblog/info/big' in url.path:
                 response.type = SinaResponseType.REPOST_LIST
-            elif 'info' in url.path:
+            elif '/info' in url.path:
                 response.type = SinaResponseType.USER_INFO
-            elif 'mblog/mbloglist' in url.path:
+            elif '/p/aj/v6/mblog/mbloglist' == url.path:
                 response.type = SinaResponseType.USER_WEIBO
-        logger.debug('Route %s' % response.type)
+            else:
+                response.type = SinaResponseType.USER_HOME
+        logger.debug('Route %s for %s' % (response.type, response.response.url))
         return (response,)
         
 
@@ -179,10 +185,13 @@ class TrendingWeiboProcessor(PipelineNode):
     def run(self, client, response):
         if response.type != SinaResponseType.TRENDING_WEIBO:
             return None
+        response = response.response
         logger = logging.getLogger(self.name)
         logger.debug('Get response: %s' % debug_str_response(response))
-        response = response.response
+ 
         links = set()
+        tweets = []
+        flows = []
         try:
             content_json = decode_response_text(response)
             assert type(content_json) == type(dict())
@@ -195,20 +204,19 @@ class TrendingWeiboProcessor(PipelineNode):
                 if type(flow.a) is int:
                     link = _USER_HOME_LINK['id'] % flow.a
                 elif type(flow.a) is str:
-                    link = _USER_HOME_LINK['nick'] % flow.a
-                link = urllib.parse.quote(link)
+                    link = _USER_HOME_LINK['nick'] % urllib.parse.quote(flow.a)
                 links.add(link)
                 if type(flow.b) is int:
                     link = _USER_HOME_LINK['id'] % flow.b
                 elif type(flow.b) is str:
-                    link = _USER_HOME_LINK['nick'] % flow.b
-                link = urllib.parse.quote(link)
+                    link = _USER_HOME_LINK['nick'] % urllib.parse.quote(flow.b)
                 links.add(link)
-                client.submit_links(links)
+            _links = generate_user_links(tweets)
+            client.submit_links(links.union(_links))
         except Exception:
             logger.exception('Exception while handling %s' % debug_str_response(response))
             response = None # Exiting
-        return (tweets, flows, links)
+        return (tweets, flows)
 
 class RepostListProcessor(PipelineNode):
     def __init__(self):
@@ -217,15 +225,17 @@ class RepostListProcessor(PipelineNode):
     def run(self, client, response):
         if response.type != SinaResponseType.REPOST_LIST:
             return None
+        response = response.response
         logger = logging.getLogger(self.name)
         logger.debug('Get response: %s' % debug_str_response(response))
-        response = response.response
         res_parse = urllib.parse.urlparse(response.url)
-        dic_query = urllib.parse.parse_qs(res_parse['query'])
+        dic_query = urllib.parse.parse_qs(res_parse.query)
         otid = int(dic_query['id'][0])
         ouid = int(dic_query['ouid'][0])
         cnt_page = int(dic_query['page'][0])
         links = set()
+        tweets = []
+        flows = []
         try:
             content_json = decode_response_text(response)
             assert type(content_json) == type(dict())
@@ -251,11 +261,43 @@ class RepostListProcessor(PipelineNode):
             for idx in range(2, total_pages+1):
                 link = _RETWEET_LINKS % (otid, idx, ouid)
                 link.add(link)
-            client.submit_links(links)
+            _links = generate_user_links(tweets)
+            client.submit_links(links.union(_links))
         except Exception:
             logger.exception('Exception while handling %s' % debug_str_response(response))
             response = None # Exiting
         return (tweets, flows)
+
+class UserHomePageProcessor(PipelineNode):
+    def __init__(self):
+        PipelineNode.__init__(self, self.__class__.__name__)
+    
+    def run(self, client, response):
+        if response.type != SinaResponseType.USER_HOME:
+            return None
+        response = response.response
+        logger = logging.getLogger(self.name)
+        logger.debug('Get response: %s' % debug_str_response(response))
+        url_home = response.url.split('?')[0]
+        try:
+            links = []
+            content = decode_response_text(response)
+            content = strip_text_wight_blank(content)
+            page_id, uid = user_home_config_parser(content)
+            if page_id:
+                link = _USER_INFO_LINK % (page_id, url_home)
+                links.append(link)
+                if uid:
+                    domain = page_id[:6]
+                    link = _USER_TWEETS_LINKS['top_page'] % (domain, 1, uid, domain)
+                    links.append(link)
+                client.submit_links(links)
+            else:
+                logger.warn('%s does not have a page_id field.' % url_home)
+        except Exception:
+            logger.exception('Exception while handling %s' % debug_str_response(response))
+
+
 
 class UserInfoProcessor(PipelineNode):
     def __init__(self):
@@ -264,23 +306,24 @@ class UserInfoProcessor(PipelineNode):
     def run(self, client, response):
         if response.type != SinaResponseType.USER_INFO:
             return None
+        response = response.response
         logger = logging.getLogger(self.name)
         logger.debug('Get response: %s' % debug_str_response(response))
-        response = response.response
-        url_path = response.url.split('?')[0]
-        url_home = url_path[:-5]
+        logger.debug('%s' % response.url)
+        res_parse = urllib.parse.urlparse(response.url)
+        dic_query = urllib.parse.parse_qs(res_parse.query)
+        url_home = dic_query['home'][0]
+        users = []
         try:
             content = decode_response_text(response)
             content = strip_text_wight_blank(content)
             user = SinaUser()
             user.homepage = url_home
             user_info_html_parser(content, user)
-            domain = user.page_id[:6]
-            link = _USER_TWEETS_LINKS['top_page'] % (domain, 1, user.uid, domain)
-            client.submit_links([link,])
+            users.append(user)
         except Exception:
             logger.exception('Exception while handling %s' % debug_str_response(response))
-        return (user, )
+        return (users, )
 
 
 class UserWeiboProcessor(PipelineNode):
@@ -292,15 +335,15 @@ class UserWeiboProcessor(PipelineNode):
             return None
         response = response.response
         res_parse = urllib.parse.urlparse(response.url)
-        dic_query = urllib.parse.parse_qs(res_parse['query'])
+        dic_query = urllib.parse.parse_qs(res_parse.query)
         domain = int(dic_query['domain'][0])
         uid = int(dic_query['id'][0])
         cnt_page = int(dic_query['page'][0])
         domain_op = int(dic_query['domain_op'][0])
         page_bar = int(dic_query.get('pagebar', '[-1]')[0])
 
-        tweets = list()
-        flows = list()
+        tweets = []
+        flows = []
         logger = logging.getLogger(self.name)
         try:
             links = set()
@@ -334,7 +377,8 @@ class UserWeiboProcessor(PipelineNode):
                 links.add(link)
                 link = _USER_TWEETS_LINKS['bot_page'] % (domain, idx, idx, 1, uid, domain)
                 links.add(link)
-            client.submit_links(links)
+            _links = generate_user_links(tweets)
+            client.submit_links(links.union(_links))
         except Exception:
             logger.exception('Exception while handling %s' % debug_str_response(response))
             response = None # Exiting
@@ -359,6 +403,7 @@ class LevelDBWriter(PipelineNode):
         for entries in kws:
             if not entries:
                 continue
+            logger.debug('Writing: %s' % entries)
             entry = entries.pop()
             db_name = self.db_name_map.get(entry.__class__.__name__, 'error.db')
             db = plyvel.DB(join(self.db_dir, db_name), create_if_missing=True) 
@@ -430,6 +475,24 @@ def strip_text_wight_blank(text):
 
 # Html parser
 
+def user_home_config_parser(html):
+    """
+    Return page_id, uid
+    """
+    page_id = ''
+    uid = ''
+    for script in BeautifulSoup(html, 'lxml').find_all('script'):
+        if "$CONFIG['page_id']" in str(script):
+            config_box = script.contents[0]
+            break
+    if config_box:
+        for value in config_box.split(';'):
+            if "['page_id']" in value:
+                page_id = value.split("'")[-2]
+            elif "['oid']" in value:
+                uid = value.split("'")[-2]
+    return (page_id, uid)
+ 
 def user_info_html_parser(html, user):
     config_box = ''
     number_box = ''
@@ -501,20 +564,20 @@ def tweet_page_parser(html, paging_info=False):
             continue
         is_forward = wrap_box.attrs.get('isForward', False)
         tweet = SinaTweet()
-        tweet.tid = wrap_box.attrs.get('mid', 0)
+        tweet.tid = int(wrap_box.attrs.get('mid', 0))
         tbinfo = wrap_box.attrs.get('tbinfo', '')
         if tbinfo:
             uid = ouidp.match(tbinfo)
-            tweet.uid = uid.groups()[1]
+            tweet.uid = int(uid.groups()[1])
         flow = tweet_box_parser(tweet_box, tweet)
         hanle_box = wrap_box.find('div', 'WB_handle')
         tweet_handle_box_parser(hanle_box, tweet)
         if is_forward:
             otweet = SinaTweet()
-            otweet.tid = wrap_box.attrs.get('omid', 0)
+            otweet.tid = int(wrap_box.attrs.get('omid', 0))
             if tbinfo:
                 ouid = rouidp.match(tbinfo)
-                otweet.uid = ouid.groups()[1]
+                otweet.uid = int(ouid.groups()[1])
             otweet_box = tweet_box.find('div', 'WB_expand')
             tweet_box_parser(otweet_box, otweet)
             tweet.otid = otweet.tid
@@ -528,8 +591,8 @@ def tweet_page_parser(html, paging_info=False):
             flow.append(f)
             handle_box = otweet_box.find('div', 'WB_handle')
             tweet_handle_box_parser(handle_box, otweet)
+            tweets.append(otweet)
         tweets.append(tweet)
-        tweets.append(otweet)
         flows.extend(flow)
     return (tweets, flows, pages)
 
@@ -548,15 +611,19 @@ def tweet_box_parser(box, tweet):
         if inner.name == 'img':
             continue
         elif inner.name == 'a':
-            bypass = True
-            path.append(inner.get_text()[1:])
+            user_card = inner.attrs.get('usercard', '')
+            if user_card:
+                bypass = True
+                path.append(user_card.split('=')[1])
+                continue
+            tweet.content += inner.get_text()
         elif inner.name is None and not bypass:
             tweet.content += inner
     flows = []
     if path:
         flow = SinaFlow()
         flow.a = path.pop()
-        for _ in range(path):
+        for _ in range(len(path)):
             e = path.pop()
             flow.b = e
             flows.append(flow)
@@ -583,7 +650,7 @@ def tweet_handle_box_parser(box, tweet):
     """
     p = re.compile('[0-9]+')
     for inner in box.find_all('a'):
-        action_type = inner.attrs('action_type', '')
+        action_type = inner.attrs.get('action_type', '')
         if action_type == 'fl_forward':
             em = inner.find('em', text=p)
             tweet.num_reposts = int(em.get_text())
@@ -601,7 +668,7 @@ def paging_info_parser(box):
         if link == '':
             continue
         url_parse = urllib.parse.urlparse(link)
-        url_query = urllib.parse.parse_qs(url_parse['query'])
+        url_query = urllib.parse.parse_qs(url_parse.query)
         page = url_query.get('page', 0)
         pages = max(pages, page)
     return pages
@@ -658,3 +725,11 @@ def extract_html_from_script(script):
     if '<html>' in script or 'html' not in script:
         return ''
     return script[script.find('div') - 1:-21]
+
+def generate_user_links(tweets):
+    links = set()
+    for tweet in tweets:
+        link = _USER_HOME_LINK['id'] % tweet.uid
+        links.add(link)
+    return links
+
