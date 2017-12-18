@@ -115,7 +115,7 @@ class Downloader(threading.Thread):
                 # Link Hack
                 if 'REDIRECT' == link[:9]:
                     res = self.session.head(link[9:])
-                    link = res.url + /info
+                    link = res.url + '/info'
                 response = self.session.get(link)
                 if self._is_login(response):
                     return response

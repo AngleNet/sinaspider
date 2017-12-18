@@ -185,7 +185,7 @@ class TrendingWeiboProcessor(PipelineNode):
                 logger.debug('%s failed.' % response.url)
                 return # Failed, need retry.
             content = strip_text_wight_blank(content_json['data'])
-            tweets, flows = tweet_page_parser(content)
+            tweets, flows, pages = tweet_page_parser(content)
             for flow in flows:
                 if type(flow.a) is int:
                     link = _USER_HOME_LINK['id'] % flow.a
@@ -347,7 +347,7 @@ class LevelDBWriter(PipelineNode):
         if not kws:
             return
         logger = logging.getLogger(self.name)
-        for entries in *kws:
+        for entries in kws:
             if not entries:
                 continue
             entry = entries.pop()
@@ -480,6 +480,10 @@ def tweet_page_parser(html, paging_info=False):
     rouidp = re.compile(r'(rouid=([0-9]*))')
     box = BeautifulSoup(html, 'lxml')
     for wrap_box in box.find_all('div', 'WB_cardwrap'):
+        if paging_info:
+            node_type = wrap_box.attrs.get('node-type', '')
+            if node_type == 'feed_list_page':
+                pages = paging_info_parser(wrap_box)
         if 'mid' not in wrap_box.attrs or wrap_box.find('div', 'WB_cardtitle_b'):
             #Bypass mysterious box
             continue
@@ -581,6 +585,18 @@ def tweet_handle_box_parser(box, tweet):
             em = inner.find('em', text=p)
             tweet.num_loves = int(em.get_text())
 
+def paging_info_parser(box):
+    pages = 0
+    for page_box in box.find_all(attrs={'bpfilter': 'page'}):
+        link = page_box.get('href', '')
+        if link == '':
+            continue
+        url_parse = urllib.parse.urlparse(link)
+        url_query = urllib.parse.parse_qs(url_parse['query'])
+        page = url_query.get('page', 0)
+        pages = max(pages, page)
+    return pages
+
 def retweet_list_page_parser(html, otid, ouid):
     """
     Return a list tweets along with retweeting relations.
@@ -595,7 +611,7 @@ def retweet_list_page_parser(html, otid, ouid):
         tweet.otid = otid
         tweet.ouid = ouid
         face_box = tweet_box.find('div', 'WB_face')
-        uid = uidp.match(face_box.a.attrs.get('usercard', '')
+        uid = uidp.match(face_box.a.attrs.get('usercard', ''))
         tweet.uid = int(uid.groups()[1])
         from_box = tweet_box.find('div', 'WB_from')
         tweet_from_box_parser(from_box, tweet)
