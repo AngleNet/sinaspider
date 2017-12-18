@@ -10,8 +10,6 @@ import re
 import requests
 import rsa
 
-logger = logging.getLogger(__name__)
-
 
 class ResponseUtils(object):
     @staticmethod
@@ -82,7 +80,6 @@ class SinaSessionLoginer(object):
             'url': 'http://weibo.com/ajaxlogin.php?framelogin=1&callback=parent.sinaSSOController.feedBackUrlCallBack',
             'returntype': 'META'
         }
-        logger.debug('Encrypted payload is: %s', ret)
         return ret
 
     def login(self, user_identity):
@@ -90,6 +87,7 @@ class SinaSessionLoginer(object):
         Login via the specified user identity and store the cookies to the
         specified session.
         """
+        logger = logging.getLogger(self.__class__.__name__)
         self.user_identity = user_identity
         # Phase one: Retrieve server time and public key for user identifier
         # encryption.
@@ -107,6 +105,7 @@ class SinaSessionLoginer(object):
         # Phase two: Send the encrypted user identifier to login_url.
         logger.info('Login Phase 2: send encrypted user identifier')
         res = self.session.post(self.login_url, encrypt_payload)
+        res.encoding='gb2312'
         logger.debug('Get login response: %s', res.text)
         logger.debug('Get login cookies: %s', res.cookies)
         logger.debug('Session cookies: %s', self.session.cookies)
@@ -115,6 +114,7 @@ class SinaSessionLoginer(object):
         # Phase three: Get the final cookies.
         logger.info('Login Phase 3: redirect and get final cookies')
         res = self.session.get(redirect_url)
+        res.encoding='gb2312'
         logger.debug('Get redirect response: %s', res.text)
         logger.debug('Get login cookies: %s', res.cookies)
         logger.debug('Session cookies: %s', self.session.cookies)

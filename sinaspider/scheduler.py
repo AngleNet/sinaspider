@@ -3,7 +3,8 @@ A simple scheduler.
 """
 
 import logging
-from os.path import abspath, dirname, join
+import os
+from os.path import abspath, dirname, join, isdir
 import pickle
 import plyvel
 import signal
@@ -17,6 +18,7 @@ import sinaspider.services.scheduler_service as scheduler_service
 import sinaspider.services.ttypes as ttypes
 from sinaspider.config import *
 import sinaspider.utils
+import sinaspider.sina_pipeline
 
 
 class SchedulerServiceHandler(scheduler_service.Iface):
@@ -42,9 +44,14 @@ class SchedulerServiceHandler(scheduler_service.Iface):
             ident = ttypes.UserIdentity(ident['name'], ident['pwd'])
             self.user_identities.add(ident)
         db_dir = join(dirname(dirname(abspath(__file__))), 'database')
+        if not isdir(db_dir):
+            os.makedirs(db_dir)
         self.ready_links_db = plyvel.DB(join(db_dir, 'ready_links.db'), create_if_missing=True)
         self.dead_links_db = plyvel.DB(join(db_dir, 'dead_links.db'), create_if_missing=True)
         self.ready_links_generator = self._ready_links_generator()
+    def close(self):
+        self.ready_links_db.close()
+        self.dead_links_db.close()
 
     def register_downloader(self, name):
         """
@@ -124,7 +131,7 @@ class SchedulerServiceHandler(scheduler_service.Iface):
          - size
         """
         self._link_batch_size = size
-        links = self.ready_links_generator()
+        links = next(self.ready_links_generator)
         for link in links:
             klink = pickle.dumps(link)
             self.dead_links_db.put(klink, b'')
@@ -143,7 +150,7 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         count = 0
         for link in links:
             klink = pickle.dumps(link)
-            if self.dead_links_db.get(klink):
+            if self.dead_links_db.get(klink) == b'' or self.ready_links_db.get(klink) == b'':
                 continue
             self.ready_links_db.put(klink, b'')
             count += 1
@@ -201,10 +208,10 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         """
         Return a link
         """
+        count = 0
         while True:
             snapshot = self.ready_links_db.snapshot()
             with snapshot.iterator() as it:
-                count = 0
                 links = []
                 for k, v in it:
                     count += 1
@@ -213,9 +220,11 @@ class SchedulerServiceHandler(scheduler_service.Iface):
                         yield links
                         links = []
                         count = 0
+                if count >= 0: # Less links
+                    yield links
+                    links = []
+                    count = 0
             snapshot.close()
-
-
 
 class SchedulerServerDaemon(sinaspider.utils.Daemon, TServer.TServer):
     """
@@ -273,6 +282,7 @@ class SchedulerServerDaemon(sinaspider.utils.Daemon, TServer.TServer):
                         'Failed. Restarting in %s seconds...' %
                         interval)
                     time.sleep(interval)
+        self.handler.close()
         logger.info('Service stopped.')
 
     def sig_handler(self, sig, func):

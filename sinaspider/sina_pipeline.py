@@ -3,7 +3,8 @@ import aenum
 from bs4 import BeautifulSoup
 import json
 import logging
-from os.path import dirname, join, abspath
+import os
+from os.path import dirname, join, abspath, isdir
 import pickle
 import plyvel
 import re
@@ -154,6 +155,8 @@ class Router(PipelineNode):
         PipelineNode.__init__(self, self.__class__.__name__)
 
     def run(self, client, response):
+        logger = logging.getLogger(self.name)
+        logger.debug('Get response: %s' % debug_str_response(response))
         url = urllib.parse.urlsplit(response.url)
         response = SinaResponse(SinaResponseType.UNDEFINED, response)
         if url.netloc == 'd.weibo.com':
@@ -165,6 +168,7 @@ class Router(PipelineNode):
                 response.type = SinaResponseType.USER_INFO
             elif 'mblog/mbloglist' in url.path:
                 response.type = SinaResponseType.USER_WEIBO
+        logger.debug('Route %s' % response.type)
         return (response,)
         
 
@@ -175,9 +179,10 @@ class TrendingWeiboProcessor(PipelineNode):
     def run(self, client, response):
         if response.type != SinaResponseType.TRENDING_WEIBO:
             return None
+        logger = logging.getLogger(self.name)
+        logger.debug('Get response: %s' % debug_str_response(response))
         response = response.response
         links = set()
-        logger = logging.getLogger(self.name)
         try:
             content_json = decode_response_text(response)
             assert type(content_json) == type(dict())
@@ -212,6 +217,8 @@ class RepostListProcessor(PipelineNode):
     def run(self, client, response):
         if response.type != SinaResponseType.REPOST_LIST:
             return None
+        logger = logging.getLogger(self.name)
+        logger.debug('Get response: %s' % debug_str_response(response))
         response = response.response
         res_parse = urllib.parse.urlparse(response.url)
         dic_query = urllib.parse.parse_qs(res_parse['query'])
@@ -219,7 +226,6 @@ class RepostListProcessor(PipelineNode):
         ouid = int(dic_query['ouid'][0])
         cnt_page = int(dic_query['page'][0])
         links = set()
-        logger = logging.getLogger(self.name)
         try:
             content_json = decode_response_text(response)
             assert type(content_json) == type(dict())
@@ -258,10 +264,11 @@ class UserInfoProcessor(PipelineNode):
     def run(self, client, response):
         if response.type != SinaResponseType.USER_INFO:
             return None
+        logger = logging.getLogger(self.name)
+        logger.debug('Get response: %s' % debug_str_response(response))
         response = response.response
         url_path = response.url.split('?')[0]
         url_home = url_path[:-5]
-        logger = logging.getLogger(self.name)
         try:
             content = decode_response_text(response)
             content = strip_text_wight_blank(content)
@@ -337,6 +344,8 @@ class LevelDBWriter(PipelineNode):
     def __init__(self):
         PipelineNode.__init__(self, self.__class__.__name__)
         self.db_dir = join(dirname(dirname(abspath(__file__))), 'database')
+        if not isdir(self.db_dir):
+            os.makedirs(self.db_dir)
         self.db_name_map = {
             'SinaTweet': 'tweets.db',
             'SinaUser': 'users.db',

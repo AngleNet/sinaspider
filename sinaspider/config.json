@@ -1,6 +1,6 @@
 {
     "DOWNLOADER":{
-        "link_batch_size": 100,
+        "link_batch_size": 1,
         "name_prefix": "downloader-test",
         "num_downloaders": 2 
     },
@@ -20,6 +20,7 @@
         "alive": true,
         "client_failover_interval": 3,
         "server_failover_interval": 3,
+        "timer_interval": 1,
         "proxy_max_try": 5,
         "user_identity":[
             {

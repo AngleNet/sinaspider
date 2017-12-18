@@ -6,6 +6,9 @@ import os
 from os.path import abspath, join, dirname
 import signal
 import sys
+import thrift
+import time
+import uuid
 
 import sinaspider.config
 import sinaspider.downloader
@@ -13,7 +16,39 @@ import sinaspider.log
 import sinaspider.pipeline
 import sinaspider.scheduler
 import sinaspider.utils
-import sinaspider.weibo_pipeline
+import sinaspider.services
+import sinaspider.sina_pipeline
+
+class SeedLinkSubmitDaemon(sinaspider.utils.Daemon):
+    def __init__(self, pid_file):
+        sinaspider.utils.Daemon.__init__(
+            self, pid_file, self.__class__.__name__)
+        self.links = []
+        self.links.append(sinaspider.sina_pipeline._TRENDING_TWEETS_LINK + '&uuid=%s')
+        self.running = True 
+    def run(self):
+        signal.signal(signal.SIGINT, self.exit_gracefully)
+        signal.signal(signal.SIGTERM, self.exit_gracefully)
+        addr = sinaspider.config.SCHEDULER_CONFIG['addr']
+        port = sinaspider.config.SCHEDULER_CONFIG['port']
+        transport = thrift.transport.TSocket.TSocket(addr, port)
+        transport = thrift.transport.TTransport.TBufferedTransport(transport)
+        protocol = thrift.protocol.TBinaryProtocol.TBinaryProtocol(transport)
+        client = sinaspider.services.scheduler_service.Client(protocol)
+        self.running = True
+        while self.running:
+            if not transport.isOpen():
+                transport.open()
+            patch = uuid.uuid4().hex
+            links = [link % patch for link in self.links]
+            client.submit_links(links)
+            transport.close()
+            time.sleep(2)
+        transport.close()
+ 
+    def exit_gracefully(self, sig, func):
+        self.running = False
+ 
 
 
 class SinaSpiderDaemon(sinaspider.utils.Daemon):
@@ -33,7 +68,7 @@ class SinaSpiderDaemon(sinaspider.utils.Daemon):
         logger = logging.getLogger(self.name)
         logger.info('Init pipeline engine')
         queue = self.manager.Queue(-1)
-        pipeline = sinaspider.weibo_pipeline.SpiderPipeline(queue)
+        pipeline = sinaspider.sina_pipeline.SinaPipeline(queue)
         engine = sinaspider.pipeline.PipelineEngine(pipeline, self.manager)
         self.engine_server = multiprocessing.Process(name=engine.name,
                                                      target=engine.run)
@@ -74,6 +109,8 @@ if __name__ == '__main__':
             daemon = sinaspider.scheduler.SchedulerServerDaemon(pid_file)
         elif target == 'spider':
             daemon = SinaSpiderDaemon(pid_file)
+        elif target == 'seeder':
+            daemon = SeedLinkSubmitDaemon(pid_file)
         else:
             print("Unknown target")
             sys.exit(2)

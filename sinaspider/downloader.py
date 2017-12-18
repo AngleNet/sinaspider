@@ -129,6 +129,9 @@ class Downloader(threading.Thread):
         """
         Should be implemented inline.
         """
+        url = response.url.split('?')[0]
+        if 'passport.weibo.com/visitor/visitor' in url:
+            return False
         return True
 
     def stop(self):
