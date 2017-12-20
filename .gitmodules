@@ -1,6 +1,3 @@
-[submodule "third_party/proxyscanner"]
-	path = third_party/proxyscanner
-	url = https://github.com/jmpews/proxyscanner
-[submodule "third_party/xsec-proxy-scanner"]
-	path = third_party/xsec-proxy-scanner
-	url = https://github.com/netxfly/xsec-proxy-scanner
+[submodule "third_party/ProxyBroker"]
+	path = third_party/ProxyBroker
+	url = https://github.com/constverum/ProxyBroker

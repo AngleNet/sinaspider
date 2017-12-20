@@ -103,3 +103,10 @@ A simple weibo spider which collects trending post messages.
 * Running Go:
 
     Set up go: [Go wiki](https://github.com/golang/go/wiki/Ubuntu)
+
+* Proxy Pool:
+    
+    proxybroker serve --host 127.0.0.1 --port 8888 --types HTTP HTTPS --lvl High
+    export HTTP_PROXY=http://127.0.0.1:8888
+    export HTTPS_PROXY=https://127.0.0.1:8888
+
