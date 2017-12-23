@@ -56,15 +56,14 @@ class SinaUser(Serializable):
         self.location = ''
         self.brief = ''
         self.birth = ''
+        self.labels = ''
+        self.homepage = ''
         self.num_tweets = 0 
         self.num_followees = 0 # Been followed by the user.
         self.num_fans = 0
-        self.sentiment = '' 
         self.vip_level = 0 # 0 indicates not a VIP
-        self.is_certified = False
-        self.homepage = ''
-        self.labels = ''
         self.page_id = ''
+        self.others = dict()
     
     def __repr__(self):
         L = ['%s=%r' % (key, value)
@@ -497,27 +496,29 @@ def user_info_html_parser(html, user):
     config_box = ''
     number_box = ''
     info_box = ''
+    level_box = ''
     for script in BeautifulSoup(html, 'lxml').find_all('script'):
         if "$CONFIG['page_id']" in str(script):
             config_box = script.contents[0]
         elif 'Pl_Core_T8CustomTriColumn__' in str(script):
             number_box = str(script)
-        elif 'Pl_Core_UserInfo__' in str(script):
+        elif 'Pl_Core_UserInfo__' in str(script) or \
+            'Pl_Official_PersonalInfo__' in str(script):
             info_box = str(script)
+        elif 'Pl_Official_RightGrowNew__' in str(script):
+            level_box = str(script)
     if config_box:
         for value in config_box.split(';'):
             if "['oid']" in value:
                 user.id = value.split("'")[-2]
             elif "['page_id']" in value:
                 user.page_id = value.split("'")[-2]
-            elif "['sex']" in value:
-                user.gender = value.split("'")[-2]
             elif "['onick']" in value:
                 user.nick_name = value.split("'")[-2]
     if number_box:
         number_box = extract_html_from_script(number_box)
         script = BeautifulSoup(number_box, 'lxml')
-        for box in script.find_all('td', class_='S_line1'):
+        for box in script.find_all('td', 'S_line1'):
             name = box.span.contents[0].strip()
             number = box.strong.contents[0].strip()
             if name == '关注':
@@ -528,17 +529,37 @@ def user_info_html_parser(html, user):
                 user.num_tweets = int(number)
     if info_box:
         info_box = extract_html_from_script(info_box)
-        script = BeautifulSoup(script, 'lxml')
-        certified_box = script.find('p', class_='verify')
-        if certified_box:
-            user.is_certified = True
-        for box in script.find_all('li', class_='S_line2'):
-            item = box.find('span', class_='item_text')
-            if 'Lv' in str(item):
-                user.vip_level = int(item.span.contents[0].strip().split('.')[-1])
-            elif '标签' in str(item):
-                for label_box in item.find_all('a'):
-                    user.label += label_box.contents[0] + ';'
+        info_box = BeautifulSoup(info_box, 'lxml')
+        for box in script.find_all('li', 'li_1'):
+            title_box = box.find('span', 'pt_title')
+            detail_box = box.find('span', 'pt_detail')
+            if not title_box or not detail_box:
+                continue
+            title = title_box.get_text(strip=True)
+            detail = detail_box.get_text('|', strip=True)
+            if '昵称' in title:
+                user.nick_name = detail
+            elif '所在地' in title:
+                user.location = detail
+            elif '性别' in title:
+                user.gender = detail
+            elif '简介' in title:
+                user.brief = detail
+            elif '个性域名' in title:
+                user.homepage = detail
+            elif '标签' in title:
+                user.labels = detail
+            else:
+                user.others[title] = detail
+    if level_box:
+        level_box = extract_html_from_script(level_box)
+        level_box = BeautifulSoup(level_box, 'lxml')
+        level_box = level_box.find('div', 'level_box')
+        if level_box:
+            title = level_box.find('a')
+            if title:
+                self.vip_level = int(title.get_text()[3:])
+                
 
 def tweet_page_parser(html, paging_info=False):
     """
