@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import json
 import logging
 import multiprocessing
 import os
@@ -9,6 +10,7 @@ import sys
 import thrift
 import time
 import uuid
+import requests
 
 import sinaspider.config
 import sinaspider.downloader
@@ -18,6 +20,51 @@ import sinaspider.scheduler
 import sinaspider.utils
 import sinaspider.services
 import sinaspider.sina_pipeline
+
+class CookieUploader(object):
+    def start(self):
+        addr = sinaspider.config.SCHEDULER_CONFIG['addr']
+        port = sinaspider.config.SCHEDULER_CONFIG['port']
+        transport = thrift.transport.TSocket.TSocket(addr, port)
+        transport = thrift.transport.TTransport.TBufferedTransport(transport)
+        protocol = thrift.protocol.TBinaryProtocol.TBinaryProtocol(transport)
+        client = sinaspider.services.scheduler_service.Client(protocol)
+        # Read cookie file
+        fcookie = 'cookies.json'
+        cookie_dict = None
+        with open(fcookie, 'r') as fd:
+            cookie_dict = json.load(fd)
+        cookies = list()
+        for user, cookie in cookie_dict.items():
+            cookie = sinaspider.services.ttypes.Cookie(user, cookie)
+            cookies.append(cookie)
+        transport.open()
+        client.submit_cookies(cookies)
+        transport.close()
+
+class StoreCookie(object):
+    def start(self):
+        users = list()
+        for ident in sinaspider.config.SCHEDULER_CONFIG['user_identity']:
+            ident = sinaspider.services.ttypes.UserIdentity(ident['name'], ident['pwd'])
+            users.append(ident)
+
+        cookies = dict()
+        print('Start login...')
+        for user in users:
+            session = requests.Session()
+            print('\tLogin %s...' % (user.name), end='')
+            loginer = sinaspider.sina_login.SinaSessionLoginer(session)
+            loginer.login(user)
+            print('SUCCESS')
+            cookie = ''
+            for key, value in requests.utils.dict_from_cookiejar(session.cookies).items():
+                cookie += '%s=%s;' % (key, value)
+            cookies[user.name] = cookie
+        with open('cookies.json', 'w+') as fd:
+            json.dump(cookies, fd)
+        print('Complete.')
+
 
 class SeedLinkSubmitDaemon(sinaspider.utils.Daemon):
     def __init__(self, pid_file):
@@ -111,6 +158,10 @@ if __name__ == '__main__':
             daemon = SinaSpiderDaemon(pid_file)
         elif target == 'seeder':
             daemon = SeedLinkSubmitDaemon(pid_file)
+        elif target == 'login':
+            daemon = StoreCookie()
+        elif target == 'cookie_uploader':
+            daemon = CookieUploader()
         else:
             print("Unknown target")
             sys.exit(2)

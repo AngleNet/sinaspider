@@ -38,7 +38,7 @@ A simple weibo spider which collects trending post messages.
     2. using `pip freeze`
 * Thrift 
 
-    `thrift --out . --gen py:new_style services.thrift`
+    `thrift --out . --gen py services.thrift`
 
     Issues:
 
@@ -109,4 +109,3 @@ A simple weibo spider which collects trending post messages.
     proxybroker serve --host 127.0.0.1 --port 8888 --types HTTP HTTPS --lvl High
     export HTTP_PROXY=http://127.0.0.1:8888
     export HTTPS_PROXY=https://127.0.0.1:8888
-

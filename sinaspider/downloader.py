@@ -3,6 +3,7 @@ A multithread downloader.
 """
 
 import logging
+import random
 import requests
 import threading
 import time
@@ -37,27 +38,31 @@ class Downloader(threading.Thread):
         self.downloading = False
         self.pipeline = pipeline
 
+        self.proxy_lock = threading.Lock() # Protects updating of proxies.
+        self.proxies = None
+        self.transport = TSocket.TSocket(SCHEDULER_CONFIG['addr'],
+                                    SCHEDULER_CONFIG['port'])
+        self.transport = TTransport.TBufferedTransport(
+            self.transport)
+        protocol = TBinaryProtocol.TBinaryProtocol(
+            self.transport)
+        self.client = Client(protocol)
+ 
+
     def run(self):
         logger = logging.getLogger(self.name)
         logger.info('Starting %s' % self.name)
         self.downloading = True
-        transport = TSocket.TSocket(SCHEDULER_CONFIG['addr'],
-                                    SCHEDULER_CONFIG['port'])
-        transport = TTransport.TBufferedTransport(
-            transport)
-        protocol = TBinaryProtocol.TBinaryProtocol(
-            transport)
-        client = Client(protocol)
         interval = SCHEDULER_CONFIG['client_failover_interval']
         while self.downloading:
             try:
-                if not transport.isOpen():
-                    transport.open()
-                client.register_downloader(self.name)
+                if not self.transport.isOpen():
+                    self.transport.open()
+                self.client.register_downloader(self.name)
                 logger.debug('Registered')
-                self.user_identity = client.request_user_identity(self.name)
+                self.user_identity = self.client.request_user_identity(self.name)
                 logger.debug('Get user identity: %s' % self.user_identity)
-                transport.close()
+                self.transport.close()
                 break
             except TTransport.TTransportException:
                 logger.exception(
@@ -69,11 +74,11 @@ class Downloader(threading.Thread):
 
         while self.downloading:
             try:
-                if not transport.isOpen():
-                    transport.open()
-                self.links = client.grab_links(
+                if not self.transport.isOpen():
+                    self.transport.open()
+                self.links = self.client.grab_links(
                     DOWNLOADER_CONFIG['link_batch_size'])
-                transport.close()
+                self.transport.close()
                 if len(self.links) == 0:
                     logger.warn('No links available. Waiting...')
                     time.sleep(interval)
@@ -95,12 +100,12 @@ class Downloader(threading.Thread):
                 self.downloading = False
 
 
-        if transport.isOpen():
+        if self.transport.isOpen():
             # TODO: submit uncrawled links to scheduler.
             logger.debug('Unregiser downloader.')
-            client.unregister_downloader(self.name)
+            self.client.unregister_downloader(self.name)
             logger.debug('Closing connection to scheduler.')
-            transport.close()
+            self.transport.close()
         logger.info('Downloader stopped.')
 
     def _download(self, link):
@@ -121,7 +126,8 @@ class Downloader(threading.Thread):
                 if self._is_login(response):
                     return response
                 logger.info('Session expired. Relogin...')
-                self.loginer.login(self.user_identity)
+                #self.loginer.login(self.user_identity)
+                self._update_cookie()
             except requests.RequestException:
                 logger.exception('Exception in downloading %s' % link)
         return None  # Exiting
@@ -135,5 +141,37 @@ class Downloader(threading.Thread):
             return False
         return True
 
+    def _update_cookie(self):
+        logger = logging.getLogger(self.name)
+        cookie = None
+        while True:
+            time.sleep(DOWNLOADER_CONFIG['cookie_update_interval'])
+            if not self.transport.isOpen():
+                self.transport.open()
+            cookie = self.client.request_cookie(self.name)
+            self.transport.close()
+            if cookie.user != 'NULL':
+                break
+            logger.info('No cookies. Retry later...')
+        logger.info('Get cookie: %s' % cookie) 
+        cookie_dict = dict()
+        for entry in cookie.cookie.split(';'):
+            if entry == '':
+                continue
+            _idx = entry.find('=')
+            key = entry[:_idx]
+            value = entry[_idx+1:]
+            cookie_dict[key] = value
+        self.session.cookies = requests.cookies.cookiejar_from_dict(cookie_dict)
+
     def stop(self):
         self.downloading = False
+
+    def update_proxy_list_callback(self):
+        """
+        Update the proxy list later via the timer.
+        """
+        self.proxy_lock.acquire()
+        if not self.transport.isOpen():
+            self.transport.open()
+

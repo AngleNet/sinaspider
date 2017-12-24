@@ -1,5 +1,5 @@
 // Defines remote services.
-namespace py sinaspider.services
+namespace py services
 
 typedef i32 Integer
 
@@ -23,6 +23,14 @@ struct UserIdentity{
 struct ProxyAddress{
     1: required string addr,
     2: required Integer port
+}
+
+/**
+ * Cookie entry.
+ */
+struct Cookie{
+    1: required string user,
+    2: required string cookie 
 }
 
 /**
@@ -66,6 +74,11 @@ service scheduler_service{
     ProxyAddress request_proxy(1: required string name),
 
     /**
+     * Request a batch of living proxies.
+     */
+    list<ProxyAddress> request_proxies(1: required string name, 2: required Integer size),
+
+    /**
      * Resign a proxy. If a downloader find out the proxy is dead, tell the scheduler.
      */
     RetStatus resign_proxy(1: required ProxyAddress addr, 2: required string name),
@@ -73,5 +86,15 @@ service scheduler_service{
     /**
      * Submit a batch of proxies to scheduler.
      */
-    RetStatus submit_proxies(1: required list<ProxyAddress> addrs)
+    RetStatus submit_proxies(1: required list<ProxyAddress> addrs),
+
+    /**
+     * Request a cookie.
+     */
+    Cookie request_cookie(1: required string name),
+
+    /**
+     * Submit cookies
+     */
+    RetStatus submit_cookies(1: required list<Cookie> cookies)
 }

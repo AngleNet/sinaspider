@@ -2,8 +2,9 @@
     "DOWNLOADER":{
         "link_batch_size": 1,
         "name_prefix": "downloader-test",
-        "num_downloaders": 2,
-        "sysbusy_wait_latency": 200 
+        "num_downloaders": 1,
+        "sysbusy_wait_latency": 200,
+        "cookie_update_interval": 10
     },
     "LOGGER":{
         "use_terminal": true,

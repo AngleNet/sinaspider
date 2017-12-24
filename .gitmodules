@@ -1,3 +1,6 @@
 [submodule "third_party/ProxyBroker"]
 	path = third_party/ProxyBroker
 	url = https://github.com/constverum/ProxyBroker
+[submodule "third_party/thrift-py"]
+	path = third_party/thrift-py
+	url = https://github.com/anglenet/thrift-py

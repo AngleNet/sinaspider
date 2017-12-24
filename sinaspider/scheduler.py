@@ -32,6 +32,8 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         self.user_identities = set() # Keep unused user identities
         self.idle_proxies = set() # Keep idle proxies
         self.proxies = set() # Keeps all of proxies
+        self.cookies = dict()
+        self.idle_cookies = set()
         self.ready_links_generator = None
         self._link_batch_size = 0
         self.ready_links_db = None
@@ -105,7 +107,7 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         password can only be granted to exactly one downloader.
         """
         ident = self.downloaders[name]['user_identity']
-        if self.downloaders[name]['user_identity']:
+        if ident:
             self.logger.warn('%s already has %s. Remind it.' % (name, ident))
             return ident
         if len(self.user_identities) == 0:
@@ -187,6 +189,17 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         self.logger.info('%s proxies left.' % len(self.idle_proxies))
         return proxy
 
+    def request_proxies(self, name, size):
+        """
+        Request a batch of living proxies.
+
+        Parameters:
+         - name
+         - size
+        """
+        pass
+
+
     def resign_proxy(self, addr, name):
         """
         Resign a proxy. If a downloader find out the proxy is dead, tell the scheduler.
@@ -214,6 +227,37 @@ class SchedulerServiceHandler(scheduler_service.Iface):
             self.idle_proxies.add(addr)
             self.proxies.add(addr)
         self.logger.debug('%s proxies in total' % len(self.proxies))
+        return ttypes.RetStatus.SUCCESS
+
+    def request_cookie(self, name):
+        """
+        Request a cookie.
+
+        Parameters:
+         - name
+        """
+        if len(self.idle_cookies) == 0:
+            self.logger.warn('Cookies exhausted. Start over.')
+            for v in self.cookies.values():
+                self.idle_cookies.add(v)
+        if len(self.idle_cookies) == 0:
+            return ttypes.Cookie('NULL', '')
+        cookie = self.idle_cookies.pop()
+        self.logger.debug('Allocate %s for %s' % (cookie, name))
+        return cookie
+
+    def submit_cookies(self, cookies):
+        """
+        Submit cookies.
+
+        Parameters:
+         - cookies
+        """
+        self.logger.info('Receive %s cookies' % len(cookies))
+        self.idle_cookies.clear()
+        for cookie in cookies:
+            self.cookies[cookie.user] = cookie
+            self.idle_cookies.add(cookie)
         return ttypes.RetStatus.SUCCESS
 
     ## Utility methods
