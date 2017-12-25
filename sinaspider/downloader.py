@@ -39,7 +39,7 @@ class Downloader(threading.Thread):
         self.pipeline = pipeline
 
         self.proxy_lock = threading.Lock() # Protects updating of proxies.
-        self.proxies = None
+        self.proxies = set() 
         self.transport = TSocket.TSocket(SCHEDULER_CONFIG['addr'],
                                     SCHEDULER_CONFIG['port'])
         self.transport = TTransport.TBufferedTransport(
@@ -118,10 +118,16 @@ class Downloader(threading.Thread):
         logger = logging.getLogger(self.name)
         while self.downloading:
             try:
-                response = self.session.get(link)
-                if 'https://weibo.com/sorry?sysbusy' in response.url:
-                    logger.debug('Too fast. Waiting...')
-                    time.sleep(DOWNLOADER_CONFIG['sysbusy_wait_latency'])
+                while len(self.proxies) == 0:
+                    time.sleep(0.5)
+                self.proxy_lock.acquire()
+                proxy = random.choice(self.proxies)
+                self.proxy_lock.release()
+                logger.debug('Using proxy: %s' % proxy)
+                response = self.session.get(link, proxies=proxy)
+                if 'weibo.com/sorry?sysbusy' in response.url:
+                    #logger.debug('Too fast. Waiting...')
+                    #time.sleep(DOWNLOADER_CONFIG['sysbusy_wait_latency'])
                     continue
                 if self._is_login(response):
                     return response
@@ -167,11 +173,23 @@ class Downloader(threading.Thread):
     def stop(self):
         self.downloading = False
 
-    def update_proxy_list_callback(self):
+    def update_proxies_callback(self):
         """
         Update the proxy list later via the timer.
         """
-        self.proxy_lock.acquire()
         if not self.transport.isOpen():
             self.transport.open()
+        proxies = self.client.request_proxies(self.name, 
+                        DOWNLOADER_CONFIG['proxy_pool_size'])
+        self.transport.close()
+        new_proxies = list()
+        for proxy in proxies:
+            _proxy = {
+                'http': '%s:%s' % (proxy.addr, proxy.port), 
+                'https': '%s:%s' % (proxy.addr, proxy.port)
+            }
+            new_proxies.append(_proxy)
+        self.proxy_lock.acquire()
+        self.proxies = new_proxies
+        self.proxy_lock.release()
 

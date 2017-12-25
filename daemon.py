@@ -129,6 +129,12 @@ class SinaSpiderDaemon(sinaspider.utils.Daemon):
             downloader = sinaspider.downloader.Downloader(name, pipeline)
             self.downloaders.append(downloader)
 
+        self.timer = sinaspider.utils.RepeatingTimer(
+            sinaspider.config.DOWNLOADER_CONFIG['proxy_interval'],
+            self.timer_callback
+        )
+        self.timer.start()
+
         for downloader in self.downloaders:
             logger.debug('Starting %s thread' % downloader.name)
             downloader.start()
@@ -136,6 +142,7 @@ class SinaSpiderDaemon(sinaspider.utils.Daemon):
         for downloader in self.downloaders:
             downloader.join()
             logger.debug('%s finished.' % downloader.name)
+        self.timer.join()
         logger.info('Daemon stopped')
 
     def exit_gracefully(self, sig, func):
@@ -143,6 +150,16 @@ class SinaSpiderDaemon(sinaspider.utils.Daemon):
         os.kill(self.engine_server.pid, signal.SIGTERM)
         for downloader in self.downloaders:
             downloader.stop()
+        self.timer.stop()
+    
+    def timer_callback(self):
+        logger = logging.getLogger(self.name)
+        logger.info('Starting updating proxies of downloaders')
+        for downloader in self.downloaders:
+            logger.debug('Updating proxies of %s' % downloader.name)
+            downloader.update_proxies_callback()
+        logger.info('Proxies updated.')
+        
 
 
 if __name__ == '__main__':
@@ -158,9 +175,9 @@ if __name__ == '__main__':
             daemon = SinaSpiderDaemon(pid_file)
         elif target == 'seeder':
             daemon = SeedLinkSubmitDaemon(pid_file)
-        elif target == 'login':
+        elif target == 'loginer':
             daemon = StoreCookie()
-        elif target == 'cookie_uploader':
+        elif target == 'uploader':
             daemon = CookieUploader()
         else:
             print("Unknown target")

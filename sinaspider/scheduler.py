@@ -7,8 +7,10 @@ import os
 from os.path import abspath, dirname, join, isdir
 import pickle
 import plyvel
+import requests
 import signal
 import time
+import threading
 from thrift.protocol import TBinaryProtocol
 from thrift.transport import TTransport, TSocket
 from thrift.server import TServer
@@ -20,7 +22,6 @@ from sinaspider.config import *
 import sinaspider.utils
 import sinaspider.sina_pipeline
 
-
 class SchedulerServiceHandler(scheduler_service.Iface):
     """
     A scheduler service.
@@ -30,8 +31,8 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         self.logger = None
         self.downloaders = dict() # Keep alive downloaders along with other resources
         self.user_identities = set() # Keep unused user identities
-        self.idle_proxies = set() # Keep idle proxies
         self.proxies = set() # Keeps all of proxies
+        self.proxy_lock = threading.Lock()
         self.cookies = dict()
         self.idle_cookies = set()
         self.ready_links_generator = None
@@ -75,7 +76,7 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         """
         self.logger.debug('Register %s' % name)
         if name not in self.downloaders:
-            self.downloaders[name] = dict(proxies=list(), user_identity=None)
+            self.downloaders[name] = dict(user_identity=None)
         else:
             self.logger.warn('Downloader %s has been registered.' % name)
         return ttypes.RetStatus.SUCCESS
@@ -91,9 +92,6 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         if name not in self.downloaders:
             self.logger.warn('Unregister a never registered downloader: %s' % name)
             return ttypes.RetStatus.FAILED
-        for proxy in self.downloaders[name]['proxies']:
-            self.logger.debug('Reclaim proxy: %s' % str(proxy))
-            self.idle_proxies.add(proxy)
         user = self.downloaders[name]['user_identity']
         if user:
             self.user_identities.add(user)
@@ -173,22 +171,6 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         self.logger.debug('Receive %s links' % count)
         return ttypes.RetStatus.SUCCESS
 
-    def request_proxy(self, name):
-        """
-        Request a living proxy.
-
-        """
-        proxies = self.downloaders[name]['proxies']
-        if len(self.idle_proxies) == 0:
-            self.logger.warn('Proxies are exhausted. Start over')
-            self.idle_proxies = self.proxies.copy()
-        proxy = self.idle_proxies.pop()
-        if proxy not in proxies:
-            proxies.append(proxy)
-        self.logger.debug('Allocate %s for %s' % (proxy, name))
-        self.logger.info('%s proxies left.' % len(self.idle_proxies))
-        return proxy
-
     def request_proxies(self, name, size):
         """
         Request a batch of living proxies.
@@ -197,38 +179,14 @@ class SchedulerServiceHandler(scheduler_service.Iface):
          - name
          - size
         """
-        pass
-
-
-    def resign_proxy(self, addr, name):
-        """
-        Resign a proxy. If a downloader find out the proxy is dead, tell the scheduler.
-
-        Parameters:
-         - addr
-        """
-        proxies = self.downloaders[name]['proxies']
-        if addr not in proxies:
-            self.logger.warn('%s try to resign %s not owned by itself' % (name, addr))
-            return ttypes.RetStatus.FAILED
-        proxies.remove(addr)
-        self.idle_proxies.add(addr)
-        return ttypes.RetStatus.SUCCESS
-
-    def submit_proxies(self, addrs):
-        """
-        Submit a batch of proxies to scheduler.
-
-        Parameters:
-         - addrs
-        """
-        self.logger.debug('Receive %s proxies' % len(addrs))
-        for addr in addrs:
-            self.idle_proxies.add(addr)
-            self.proxies.add(addr)
-        self.logger.debug('%s proxies in total' % len(self.proxies))
-        return ttypes.RetStatus.SUCCESS
-
+        proxies = list()
+        self.proxy_lock.acquire()
+        for _ in range(min(len(self.proxies), size)):
+            proxy = self.proxies.pop()
+            proxies.append(proxy)
+        self.proxy_lock.release()
+        return  proxies
+        
     def request_cookie(self, name):
         """
         Request a cookie.
@@ -283,6 +241,20 @@ class SchedulerServiceHandler(scheduler_service.Iface):
                     count = 0
             snapshot.close()
 
+    def update_proxies_callback(self):
+        self.logger.info('Start updating proxies...')
+        ret = requests.get(SCHEDULER_CONFIG['proxy_provider'] % SCHEDULER_CONFIG['proxy_pool_size'])
+        new_proxies = set()
+        for entry in ret.text.split('\n'):
+            addr, port = entry.split(':')
+            proxy = ttypes.ProxyAddress(addr, int(port))
+            new_proxies.add(proxy)
+        self.logger.debug('New proxies: %s' % new_proxies)
+        self.proxy_lock.acquire()
+        self.proxies = new_proxies
+        self.proxy_lock.release()
+        self.logger.info('Proxies updated.')
+
 class SchedulerServerDaemon(sinaspider.utils.Daemon, TServer.TServer):
     """
     A Scheduler service server.
@@ -302,6 +274,7 @@ class SchedulerServerDaemon(sinaspider.utils.Daemon, TServer.TServer):
         TServer.TServer.__init__(self, processor, server_transport,
                                  tfactory, pfactory)
         self._is_alive = False
+        self.timer = sinaspider.utils.RepeatingTimer(SCHEDULER_CONFIG['proxy_interval'], self.handler.update_proxies_callback)
 
     def run(self):
         signal.signal(signal.SIGTERM, self.sig_handler)
@@ -309,6 +282,7 @@ class SchedulerServerDaemon(sinaspider.utils.Daemon, TServer.TServer):
         sinaspider.log.configure_logger('.scheduler.log')
         logger = logging.getLogger(self.name)
         self.handler.init()
+        self.timer.start()
         self._is_alive = True
         interval = SCHEDULER_CONFIG['server_failover_interval']
         while self._is_alive:
@@ -345,7 +319,7 @@ class SchedulerServerDaemon(sinaspider.utils.Daemon, TServer.TServer):
     def sig_handler(self, sig, func):
         self._is_alive = False
         self.serverTransport.close()
-
+        self.timer.stop()
 
 class SchedulerServiceClient(object):
     """

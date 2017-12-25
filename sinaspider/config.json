@@ -2,9 +2,11 @@
     "DOWNLOADER":{
         "link_batch_size": 1,
         "name_prefix": "downloader-test",
-        "num_downloaders": 1,
+        "num_downloaders": 3,
         "sysbusy_wait_latency": 200,
-        "cookie_update_interval": 10
+        "cookie_update_interval": 10,
+        "proxy_pool_size": 4,
+        "proxy_interval": 60
     },
     "LOGGER":{
         "use_terminal": true,
@@ -85,7 +87,10 @@
                 "name": "atropos_spider15@sina.com",
                 "pwd": "passward"
             }
-       ]
+       ],
+       "proxy_provider":"http://102900029982327442.standard.hutoudaili.com/?num=%s&area_type=1&scheme=1&anonymity=3&order=3&style=2",
+       "proxy_pool_size": 12,
+       "proxy_interval": 60 
     },
     "TEST":{
         "_comment": "Unit testing configures",

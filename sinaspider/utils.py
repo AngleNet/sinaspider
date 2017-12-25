@@ -7,6 +7,7 @@ import os
 from signal import SIGTERM
 import sys
 import time
+import threading
 
 
 class Daemon:
@@ -140,3 +141,27 @@ class Daemon:
 
 class UnimplementedException(Exception):
     pass
+
+
+class RepeatingTimer(threading.Thread):
+    def __init__(self, interval, function, args=[], kwargs={}):
+        threading.Thread.__init__(self)
+        self.interval = interval
+        self.function = function
+        self.args = args
+        self.kwargs = kwargs
+        self.finished = threading.Event()
+        self.flag_run = True
+
+    def stop(self):
+        self.finished.set()
+
+    def run(self):
+        while self.flag_run:
+            self.finished.wait(self.interval)
+            if not self.finished.is_set(): 
+                self.function(*self.args, **self.kwargs)
+            else: 
+                self.flag_run = False
+
+
