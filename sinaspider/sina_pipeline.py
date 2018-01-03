@@ -35,6 +35,7 @@ _USER_HOME_LINK = {
     'id': 'https://www.weibo.com/u/%s',
     'nick': 'https://www.weibo.com/n/%s'
 }
+_TWEET_LONGTEXT_LINK = 'https://weibo.com/p/aj/mblog/getlongtext?ajwvr=6&mid=%s&tweet=%s'
 
 
 ### Data Structures
@@ -94,6 +95,8 @@ class SinaTweet(Serializable):
             for key, value in self.__dict__.items()]
         return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
 
+    def json(self):
+        return json.dumps(self.__dict__)
 
 class SinaFlow(Serializable):
     def __init__(self):
@@ -110,6 +113,7 @@ class SinaFlow(Serializable):
 ### Pipeline definitions
 class SinaResponseType(aenum.Enum):
     TRENDING_WEIBO = 0          # d.weibo.com
+    LONG_TEXT_WEIBO = aenum.auto() # weibo.com/p/aj/mblog/getlongtext
     REPOST_LIST = aenum.auto()  # weibo.com/aj/v6/mblog/info/big
     USER_INFO= aenum.auto()     # weibo.com/p/1005052840177141/info 
     USER_WEIBO = aenum.auto()   # weibo.com/p/aj/v6/mblog/mbloglist
@@ -128,8 +132,9 @@ class SinaResponse(object):
 class SinaPipeline(Pipeline):
     """
     The Pipeline seems like:
-             +-----+
-             |     |      ---->TrendingWeiboProcessor--->LevelDBWriter
+             +-----+    +----->LongTextWeiboProcessor--->LevelDBWriter
+             |     |   /
+             |     +--/   ---->TrendingWeiboProcessor--->LevelDBWriter
              |  R  |     / 
      ------->|  O  +----/  --->UserWeiboProcessor--->LevelDBWriter
      Response|  U  +------/
@@ -144,6 +149,8 @@ class SinaPipeline(Pipeline):
         Pipeline.__init__(self, self.__class__.__name__,
                           router, queue)
         wtlevdb = LevelDBWriter()
+        pltextweibo = LongTextWeiboProcessor()
+        pltextweibo.forward(wtlevdb)
         ptrweibo = TrendingWeiboProcessor()
         ptrweibo.forward(wtlevdb)
         prelist = RepostListProcessor()
@@ -153,11 +160,13 @@ class SinaPipeline(Pipeline):
         puweibo = UserWeiboProcessor()
         puweibo.forward(wtlevdb)
         puhome = UserHomePageProcessor()
+        router.forward(pltextweibo)
         router.forward(ptrweibo)
         router.forward(prelist)
         router.forward(puinfo)
         router.forward(puweibo)
         router.forward(puhome)
+
 
 class Router(PipelineNode):
     def __init__(self):
@@ -171,7 +180,9 @@ class Router(PipelineNode):
         if url.netloc == 'd.weibo.com':
             response.type = SinaResponseType.TRENDING_WEIBO
         elif 'weibo.com' in url.netloc:
-            if 'mblog/info/big' in url.path:
+            if 'mblog/getlongtext' in url.path:
+                response.type = SinaResponseType.LONG_TEXT_WEIBO
+            elif 'mblog/info/big' in url.path:
                 response.type = SinaResponseType.REPOST_LIST
             elif '/info' in url.path:
                 response.type = SinaResponseType.USER_INFO
@@ -206,7 +217,7 @@ class TrendingWeiboProcessor(PipelineNode):
                 logger.debug('%s failed.' % response.url)
                 return # Failed, need retry.
             content = strip_text_wight_blank(content_json['data'])
-            tweets, flows, pages = tweet_page_parser(content)
+            tweets, ltext_tweets, flows, pages = tweet_page_parser(content)
             for flow in flows:
                 if type(flow.a) is int:
                     link = _USER_HOME_LINK['id'] % flow.a
@@ -219,6 +230,10 @@ class TrendingWeiboProcessor(PipelineNode):
                     link = _USER_HOME_LINK['nick'] % urllib.parse.quote(flow.b)
                 links.add(link)
             _links = generate_user_links(tweets)
+            for tweet in ltext_tweets:
+                tweet.content = ''
+                link = _TWEET_LONGTEXT_LINK % (tweet.tid, urllib.parse.quote(tweet.json()))
+                links.add(link)
             client.submit_links(links.union(_links))
         except Exception:
             logger.exception('Exception while handling %s' % debug_str_response(response))
@@ -367,7 +382,7 @@ class UserWeiboProcessor(PipelineNode):
             paging_info = False
             if cnt_page == 1 and page_bar == 1:
                 paging_info = True
-            tweets, flows, pages = tweet_page_parser(content, paging_info)
+            tweets, ltext_tweets, flows, pages = tweet_page_parser(content, paging_info)
             for flow in flows:
                 if type(flow.a) is int:
                     link = _USER_HOME_LINK['id'] % flow.a
@@ -390,11 +405,72 @@ class UserWeiboProcessor(PipelineNode):
                         domain, PIPELINE_CONFIG['user_tweets_date'])
                 links.add(link)
             _links = generate_user_links(tweets)
+            for tweet in ltext_tweets:
+                link = _TWEET_LONGTEXT_LINK % (tweet.tid, urllib.parse.quote(tweet.json()))
+                links.add(link)
             client.submit_links(links.union(_links))
         except Exception:
             logger.exception('Exception while handling %s' % debug_str_response(response))
             response = None # Exiting
         return (tweets, flows)
+
+class LongTextWeiboProcessor(PipelineNode):
+    def __init__(self):
+        PipelineNode.__init__(self, self.__class__.__name__)
+    
+    def run(self, client, response):
+        if response.type != SinaResponseType.LONG_TEXT_WEIBO:
+            return None
+        response = response.response
+        logger = logging.getLogger(self.name)
+        logger.debug('Get response: %s' % debug_str_response(response))
+        res_parse = urllib.parse.urlparse(response.url)
+        dict_query = urllib.parse.parse_qs(res_parse.query)
+        tweet = dict_query.get('tweet', [''])[0]
+        if tweet:
+            tweet = json.loads(urllib.parse.unquote(tweet))
+            _tweet = SinaTweet()
+            for key, value in tweet.items():
+                if key in _tweet.__dict__:
+                    _tweet.__dict__[key] = value
+            try:
+                content_json = decode_response_text(response)
+                assert type(content_json) == dict
+                if content_json['code'] != '100000':
+                    logger.debug('%s failed.' % response.url)
+                    return # Failed, need retry.
+                content = strip_text_wight_blank(content_json['data']['html'])
+                box = BeautifulSoup(content, 'lxml')
+                _tweet.num_topics = 0
+                _tweet.num_videos = 0
+                _tweet.num_links = 0
+                _tweet.num_atnames = 0
+                for inner in box.contents:
+                    if inner.name == 'img':
+                        continue # Emoij
+                    elif inner.name == 'a':
+                        _type = inner.attrs.get('extra-data', '')
+                        __type = inner.attrs.get('action-type', '')
+                        if 'topic' in _type:
+                            _tweet.num_topics += 1
+                            _tweet.content += inner.get_text()
+                        elif 'atname' in _type:
+                            tweet.num_atnames += 1
+                        elif 'feed_list_url' in __type:
+                            if '视频' in inner.get_text():
+                                _tweet.num_videos += 1
+                            else:
+                                _tweet.num_links += 1 
+                            _tweet.content += inner.get_text()
+                        else:
+                            logger = logging.getLogger()
+                            logger.warn('Missed tweet text: %s' % inner)
+                    elif inner.name is None:
+                        _tweet.content += inner
+                return ([_tweet],)
+            except Exception:
+                logger.exception('Exception while handling %s' % debug_str_response(response))
+        return (list(),)
 
 class LevelDBWriter(PipelineNode):
     def __init__(self):
@@ -581,6 +657,7 @@ def tweet_page_parser(html, paging_info=False):
     its own content.
     """
     tweets = []
+    ltext_tweets = []
     flows = []
     pages = 0
     ouidp = re.compile(r'(ouid=([0-9]*))')
@@ -597,14 +674,14 @@ def tweet_page_parser(html, paging_info=False):
         tweet_box = wrap_box.find('div', 'WB_detail')
         if tweet_box.find('a', ignore='ignore'):
             continue
-        is_forward = wrap_box.attrs.get('isForward', '')
+        is_forward = wrap_box.attrs.get('isforward', '')
         tweet = SinaTweet()
         tweet.tid = int(wrap_box.attrs.get('mid', 0))
         tbinfo = wrap_box.attrs.get('tbinfo', '')
         if tbinfo:
             uid = ouidp.match(tbinfo)
             tweet.uid = int(uid.groups()[1])
-        flow = tweet_box_parser(tweet_box, tweet)
+        flow, is_ltext_tweet = tweet_box_parser(tweet_box, tweet)
         hanle_box = wrap_box.find('div', 'WB_handle')
         tweet_handle_box_parser(hanle_box, tweet)
         if is_forward == '1':
@@ -614,7 +691,7 @@ def tweet_page_parser(html, paging_info=False):
                 ouid = rouidp.match(tbinfo)
                 otweet.uid = int(ouid.groups()[1])
             otweet_box = tweet_box.find('div', 'WB_expand')
-            tweet_box_parser(otweet_box, otweet)
+            _, is_ltext_otweet = tweet_box_parser(otweet_box, otweet)
             tweet.otid = otweet.tid
             tweet.ouid = otweet.uid
             f = SinaFlow()
@@ -626,10 +703,16 @@ def tweet_page_parser(html, paging_info=False):
             flow.append(f)
             handle_box = otweet_box.find('div', 'WB_handle')
             tweet_handle_box_parser(handle_box, otweet)
-            tweets.append(otweet)
-        tweets.append(tweet)
+            if is_ltext_otweet:
+                ltext_tweets.append(otweet)
+            else:
+                tweets.append(otweet)
+        if is_ltext_tweet:
+            ltext_tweets.append(tweet)
+        else:
+            tweets.append(tweet)
         flows.extend(flow)
-    return (tweets, flows, pages)
+    return (tweets, ltext_tweets, flows, pages)
 
 def tweet_box_parser(box, tweet):
     """
@@ -647,6 +730,7 @@ def tweet_box_parser(box, tweet):
                 tweet.num_images += 1
     text_box = box.find('div', 'WB_text')
     bypass = False
+    is_long_text = False
     for inner in text_box.contents:
         if inner.name == 'img':
             continue # Emoij
@@ -667,6 +751,9 @@ def tweet_box_parser(box, tweet):
                     tweet.num_videos += 1
                 else:
                     tweet.num_links += 1 
+                tweet.content += inner.get_text()
+            elif 'fl_unfold' in __type and not bypass:
+                is_long_text = True
             else:
                 logger = logging.getLogger()
                 logger.warn('Missed tweet text: %s' % inner)
@@ -685,7 +772,7 @@ def tweet_box_parser(box, tweet):
             flow.a = e
         flow.b = tweet.uid
         flows.append(flow)
-    return flows
+    return (flows, is_long_text)
 
 def tweet_from_box_parser(box, tweet):
     for inner in box.find_all('a'):
