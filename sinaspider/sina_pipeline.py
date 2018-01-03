@@ -676,6 +676,8 @@ def tweet_page_parser(html, paging_info=False):
         if tweet_box.find('a', ignore='ignore'):
             continue
         is_forward = wrap_box.attrs.get('isforward', '')
+        if is_forward == '':
+            is_forward = wrap_box.attrs.get('isForward', '')
         tweet = SinaTweet()
         tweet.tid = int(wrap_box.attrs.get('mid', 0))
         tbinfo = wrap_box.attrs.get('tbinfo', '')
@@ -683,13 +685,16 @@ def tweet_page_parser(html, paging_info=False):
             uid = ouidp.match(tbinfo)
             tweet.uid = int(uid.groups()[1])
         flow, is_ltext_tweet = tweet_box_parser(tweet_box, tweet)
-        hanle_box = wrap_box.find('div', 'WB_handle')
-        tweet_handle_box_parser(hanle_box, tweet)
+        handle_box = wrap_box.find('div', 'WB_feed_handle')
+        handle_box = handle_box.find('div', 'WB_handle')
+        tweet_handle_box_parser(handle_box, tweet)
         if is_forward == '1':
             otweet = SinaTweet()
             otweet.tid = int(wrap_box.attrs.get('omid', 0))
             if tbinfo:
                 ouid = rouidp.match(tbinfo)
+                if ouid is None:
+                    continue# Weibo already deleted.
                 otweet.uid = int(ouid.groups()[1])
             otweet_box = tweet_box.find('div', 'WB_expand')
             _, is_ltext_otweet = tweet_box_parser(otweet_box, otweet)
@@ -786,7 +791,6 @@ def tweet_from_box_parser(box, tweet):
         if action_type == 'app_source':
             tweet.platform = inner.get_text()
  
-
 def tweet_handle_box_parser(box, tweet):
     """
     Parse number of retweets, comments, loves.
@@ -794,13 +798,14 @@ def tweet_handle_box_parser(box, tweet):
     p = re.compile('[0-9]+')
     for inner in box.find_all('a'):
         action_type = inner.attrs.get('action-type', '')
+        _action_suda = inner.attrs.get('suda-uatrack', '')
         em = inner.find('em', text=p)
-        if action_type == 'fl_forward' and em:
-            tweet.num_reposts = int(em.get_text())
-        elif action_type == 'fl_comment' and em:
-            tweet.num_comments = int(em.get_text())
-        elif action_type == 'fl_like' and em:
+        if action_type == 'fl_like' and em:
             tweet.num_loves = int(em.get_text())
+        elif (action_type == 'fl_forward' or 'transfer' in _action_suda) and em:
+            tweet.num_reposts = int(em.get_text())
+        elif (action_type == 'fl_comment' or 'comment' in _action_suda) and em:
+            tweet.num_comments = int(em.get_text())
 
 def paging_info_parser(box):
     pages = 0
