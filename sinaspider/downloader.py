@@ -118,8 +118,10 @@ class Downloader(threading.Thread):
         logger = logging.getLogger(self.name)
         while self.downloading:
             try:
-                while len(self.proxies) == 0:
+                if len(self.proxies) == 0:
                     time.sleep(0.5)
+                    logger.debug('No proxies, waiting...')
+                    continue
                 self.proxy_lock.acquire()
                 proxy = random.choice(self.proxies)
                 self.proxy_lock.release()
