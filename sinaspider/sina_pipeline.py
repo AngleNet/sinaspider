@@ -493,6 +493,7 @@ def user_home_config_parser(html):
     """
     page_id = ''
     uid = ''
+    config_box = ''
     for script in BeautifulSoup(html, 'lxml').find_all('script'):
         if "$CONFIG['page_id']" in str(script):
             config_box = script.contents[0]
@@ -596,7 +597,7 @@ def tweet_page_parser(html, paging_info=False):
         tweet_box = wrap_box.find('div', 'WB_detail')
         if tweet_box.find('a', ignore='ignore'):
             continue
-        is_forward = wrap_box.attrs.get('isForward', False)
+        is_forward = wrap_box.attrs.get('isforward', '')
         tweet = SinaTweet()
         tweet.tid = int(wrap_box.attrs.get('mid', 0))
         tbinfo = wrap_box.attrs.get('tbinfo', '')
@@ -606,7 +607,7 @@ def tweet_page_parser(html, paging_info=False):
         flow = tweet_box_parser(tweet_box, tweet)
         hanle_box = wrap_box.find('div', 'WB_handle')
         tweet_handle_box_parser(hanle_box, tweet)
-        if is_forward:
+        if is_forward == '1':
             otweet = SinaTweet()
             otweet.tid = int(wrap_box.attrs.get('omid', 0))
             if tbinfo:
