@@ -584,7 +584,7 @@ def tweet_page_parser(html, paging_info=False):
     flows = []
     pages = 0
     ouidp = re.compile(r'(ouid=([0-9]*))')
-    rouidp = re.compile(r'(rouid=([0-9]*))')
+    rouidp = re.compile(r'.*(rouid=([0-9]*))')
     box = BeautifulSoup(html, 'lxml')
     for wrap_box in box.find_all('div', 'WB_cardwrap'):
         if paging_info:
@@ -597,7 +597,7 @@ def tweet_page_parser(html, paging_info=False):
         tweet_box = wrap_box.find('div', 'WB_detail')
         if tweet_box.find('a', ignore='ignore'):
             continue
-        is_forward = wrap_box.attrs.get('isforward', '')
+        is_forward = wrap_box.attrs.get('isForward', '')
         tweet = SinaTweet()
         tweet.tid = int(wrap_box.attrs.get('mid', 0))
         tbinfo = wrap_box.attrs.get('tbinfo', '')
