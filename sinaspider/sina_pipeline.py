@@ -11,17 +11,18 @@ import re
 import urllib.parse
 
 from sinaspider.pipeline import Pipeline, PipelineNode
+from sinaspider.config import  PIPELINE_CONFIG
 
 ### Links
 _USER_TWEETS_LINKS = {
     'top_page': 'https://weibo.com/p/aj/v6/mblog/mbloglist?ajwvr=6&domain=%s'
-                '&is_all=1&page=%s&id=%s&feed_type=0&domain_op=%s',
+                '&is_all=1&page=%s&id=%s&feed_type=0&domain_op=%s&stat_date=%s',
     'mid_page': 'https://www.weibo.com/p/aj/v6/mblog/mbloglist?ajwvr=6&domain=%s'
                 '&is_search=0&visible=0&is_all=1&is_tag=0&profile_ftype=1&page=%s'
-                '&pre_page=%s&pagebar=%s&id=%s&domain_op=%s',
+                '&pre_page=%s&pagebar=%s&id=%s&domain_op=%s&stat_date=%s',
     'bot_page': 'https://www.weibo.com/p/aj/v6/mblog/mbloglist?ajwvr=6&domain=%s'
                 '&is_search=0&visible=0&is_all=1&is_tag=0&profile_ftype=1&page=%s'
-                '&pre_page=%s&pagebar=%s&id=%s&domain_op=%s'
+                '&pre_page=%s&pagebar=%s&id=%s&domain_op=%s&stat_date=%s'
 }
 _USER_INFO_LINK = 'https://www.weibo.com/p/%s/info?home=%s'
 _TRENDING_TWEETS_LINK = 'https://d.weibo.com/p/aj/v6/mblog/mbloglist?ajwvr=6'\
@@ -82,6 +83,11 @@ class SinaTweet(Serializable):
         self.num_comments = 0
         self.num_loves = 0
         self.num_reposts = 0
+        self.num_topics = 0
+        self.num_atnames = 0 # Include retweet users.
+        self.num_links = 0 # Only external links
+        self.num_videos = 0
+        self.num_images = 0
 
     def __repr__(self):
         L = ['%s=%s' % (key, value)
@@ -287,11 +293,14 @@ class UserHomePageProcessor(PipelineNode):
                 link = _USER_INFO_LINK % (page_id, url_home)
                 links.add(link)
                 domain = page_id[:6]
-                link = _USER_TWEETS_LINKS['top_page'] % (domain, 1, page_id, domain)
+                link = _USER_TWEETS_LINKS['top_page'] % (domain, 1, page_id, domain,
+                        PIPELINE_CONFIG['user_tweets_date'])
                 links.add(link)
-                link = _USER_TWEETS_LINKS['mid_page'] % (domain, 1, 1, 0, page_id, domain)
+                link = _USER_TWEETS_LINKS['mid_page'] % (domain, 1, 1, 0, page_id,
+                        domain, PIPELINE_CONFIG['user_tweets_date'])
                 links.add(link)
-                link = _USER_TWEETS_LINKS['bot_page'] % (domain, 1, 1, 1, page_id, domain)
+                link = _USER_TWEETS_LINKS['bot_page'] % (domain, 1, 1, 1, page_id,
+                        domain, PIPELINE_CONFIG['user_tweets_date'])
                 links.add(link)
                 client.submit_links(links)
             else:
@@ -371,11 +380,14 @@ class UserWeiboProcessor(PipelineNode):
                     link = _USER_HOME_LINK['nick'] % urllib.parse.quote(flow.b)
                 links.add(link)
             for idx in range(2, pages+1):
-                link = _USER_TWEETS_LINKS['top_page'] % (domain, idx, page_id, domain)
+                link = _USER_TWEETS_LINKS['top_page'] % (domain, idx, page_id, domain,
+                        PIPELINE_CONFIG['user_tweets_date'])
                 links.add(link)
-                link = _USER_TWEETS_LINKS['mid_page'] % (domain, idx, idx, 0, page_id, domain)
+                link = _USER_TWEETS_LINKS['mid_page'] % (domain, idx, idx, 0, page_id,
+                        domain, PIPELINE_CONFIG['user_tweets_date'])
                 links.add(link)
-                link = _USER_TWEETS_LINKS['bot_page'] % (domain, idx, idx, 1, page_id, domain)
+                link = _USER_TWEETS_LINKS['bot_page'] % (domain, idx, idx, 1, page_id,
+                        domain, PIPELINE_CONFIG['user_tweets_date'])
                 links.add(link)
             _links = generate_user_links(tweets)
             client.submit_links(links.union(_links))
@@ -627,18 +639,36 @@ def tweet_box_parser(box, tweet):
     path = []
     from_box = box.find('div', 'WB_from')
     tweet_from_box_parser(from_box, tweet)
+    media_boxes = box.find_all('div', 'WB_media_wrap')
+    if media_boxes:
+        for media_box in media_boxes:
+            for inner in media_box.find_all('li', 'WB_pic'):
+                tweet.num_images += 1
     text_box = box.find('div', 'WB_text')
     bypass = False
     for inner in text_box.contents:
         if inner.name == 'img':
-            continue
+            continue # Emoij
         elif inner.name == 'a':
-            user_card = inner.attrs.get('usercard', '')
-            if user_card:
-                bypass = True
-                path.append(user_card.split('=')[1])
-                continue
-            tweet.content += inner.get_text()
+            _type = inner.attrs.get('extra-data', '')
+            __type = inner.attrs.get('action-type', '')
+            if 'topic' in _type and not bypass:
+                tweet.num_topics += 1
+                tweet.content += inner.get_text()
+            elif 'atname' in _type:
+                tweet.num_atnames += 1
+                if len(tweet.content) >= 2 and tweet.content[-2:] == '//':
+                    bypass = True
+                    path.append(inner.get_text()[1:])
+                    continue
+            elif 'feed_list_url' in __type and not bypass:
+                if '视频' in inner.get_text():
+                    tweet.num_videos += 1
+                else:
+                    tweet.num_links += 1 
+            else:
+                logger = logging.getLogger()
+                logger.warn('Missed tweet text: %s' % inner)
         elif inner.name is None and not bypass:
             tweet.content += inner
     tweet.content = tweet.content.strip()

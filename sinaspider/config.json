@@ -16,7 +16,8 @@
         "backup_window": 7
     },
     "PIPELINE":{
-        "engine_pool_size": 1
+        "engine_pool_size": 1,
+        "user_tweets_date": 201712
     },
     "SCHEDULER_SERVICE":{
         "addr": "127.0.0.1",
