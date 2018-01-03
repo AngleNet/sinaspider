@@ -103,10 +103,11 @@ class SinaFlow(Serializable):
         """
         A flow from a to b.
         """
+        self.tag = ''
         self.a = ''
         self.b = ''
     def __repr__(self):
-        L = '%s-->%s' % (self.a, self.b)
+        L = '[%s]%s-->%s' % (self.tag, self.a, self.b)
         return '%s(%s)' % (self.__class__.__name__, L)
 
 
@@ -695,12 +696,14 @@ def tweet_page_parser(html, paging_info=False):
             tweet.otid = otweet.tid
             tweet.ouid = otweet.uid
             f = SinaFlow()
-            f.a = otweet.tid
+            f.a = otweet.uid
             if flow:
                 f.b = flow[0].a
             else:
                 f.b = tweet.uid
             flow.append(f)
+            for f in flow:
+                f.tag = otweet.tid
             handle_box = otweet_box.find('div', 'WB_handle')
             tweet_handle_box_parser(handle_box, otweet)
             if is_ltext_otweet:
