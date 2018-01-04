@@ -1,14 +1,14 @@
 {
     "DOWNLOADER":{
-        "link_batch_size": 1,
+        "link_batch_size": 100,
         "name_prefix": "downloader-test",
-        "num_downloaders": 1,
-        "num_topic_downloaders": 2,
+        "num_downloaders": 20,
+        "num_topic_downloaders": 8,
         "num_topic_pages": 66,
         "sysbusy_wait_latency": 200,
         "cookie_update_interval": 10,
-        "proxy_pool_size": 4,
-        "proxy_interval": 60
+        "proxy_pool_size": 20,
+        "proxy_interval": 30
     },
     "LOGGER":{
         "use_terminal": true,
@@ -18,11 +18,11 @@
         "backup_window": 7
     },
     "PIPELINE":{
-        "engine_pool_size": 1,
+        "engine_pool_size": 5,
         "user_tweets_date": 201712
     },
     "SCHEDULER_SERVICE":{
-        "addr": "127.0.0.1",
+        "addr": "221.207.30.251",
         "port": "9123",
         "alive": true,
         "client_failover_interval": 3,
@@ -89,13 +89,65 @@
             {
                 "name": "atropos_spider15@sina.com",
                 "pwd": "passward"
+            },
+            {
+                "name": "atropos_spider16@sina.com",
+                "pwd": "passward"
+            },
+            {
+                "name": "atropos_spider17@sina.com",
+                "pwd": "passward"
+            },
+            {
+                "name": "atropos_spider18@sina.com",
+                "pwd": "passward"
+            },
+            {
+                "name": "atropos_spider19@sina.com",
+                "pwd": "passward"
+            },
+            {
+                "name": "atropos_spider20@sina.com",
+                "pwd": "passward"
+            },
+            {
+                "name": "atropos_spider21@sina.com",
+                "pwd": "passward"
+            },
+            {
+                "name": "atropos_tensor@sina.com",
+                "pwd": "passward"
+            },
+            {
+                "name": "atropos_kara@sina.com",
+                "pwd": "passward"
+            },
+            {
+                "name": "kara_feature@sina.com",
+                "pwd": "passward"
+            },
+            {
+                "name": "ali_kaco@sina.com",
+                "pwd": "passward"
+            },
+            {
+                "name": "getakame@sina.com",
+                "pwd": "passward"
+            },
+            {
+                "name": "karel_alpha@sina.com",
+                "pwd": "passward"
+            },
+            {
+                "name": "karel_beta@sina.com",
+                "pwd": "passward"
             }
        ],
-       "proxy_provider":"http://102900029982327442.standard.hutoudaili.com/?num=%s&area_type=1&scheme=1&anonymity=3&order=3&style=2",
-       "proxy_pool_size": 12,
-       "proxy_interval": 60,
-       "topic_link_seeder_interval": 30,
-       "hot_weibo_link_seeder_interval": 30
+       "proxy_provider":"http://104483346217327442.standard.hutoudaili.com/?num=%s&area_type=1&scheme=1&anonymity=3&order=3&style=2",
+       "proxy_pool_size": 2500,
+       "proxy_interval": 30,
+       "topic_link_seeder_interval": 3600,
+       "hot_weibo_link_seeder_interval": 1200
     },
     "TEST":{
         "_comment": "Unit testing configures",
