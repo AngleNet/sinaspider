@@ -2,6 +2,7 @@
 A multithread downloader.
 """
 
+import aenum
 import logging
 import random
 import requests
@@ -11,10 +12,16 @@ from thrift.protocol import TBinaryProtocol
 from thrift.transport import TTransport, TSocket
 
 from sinaspider.config import *
-import sinaspider.scheduler
 from sinaspider.services.scheduler_service import Client
 from sinaspider.services.ttypes import *
 from sinaspider.sina_login import SinaSessionLoginer
+
+
+class DownloaderType(aenum.Enum):
+    TOPIC_DOWNLOADER = 0 # Trending topics
+    LINK_DOWNLOADER = aenum.auto() # Normal
+
+    UNDEFINED = aenum.auto()
 
 
 class Downloader(threading.Thread):
@@ -24,7 +31,7 @@ class Downloader(threading.Thread):
     call the finish callback. The downloader should do any redirects if needed.
     """
 
-    def __init__(self, name, pipeline):
+    def __init__(self, name, pipeline, dtype):
         """
         Input:
         - name: A string of downloader name.
@@ -47,6 +54,13 @@ class Downloader(threading.Thread):
         protocol = TBinaryProtocol.TBinaryProtocol(
             self.transport)
         self.client = Client(protocol)
+        if dtype == DownloaderType.LINK_DOWNLOADER:
+            self.link_graber = self.client.grab_links
+        elif dtype == DownloaderType.TOPIC_DOWNLOADER:
+            self.link_graber = self.client.grab_topic_links
+        elif dtype == DownloaderType.UNDEFINED:
+            import os
+            os._exit(1)
  
 
     def run(self):
@@ -76,7 +90,7 @@ class Downloader(threading.Thread):
             try:
                 if not self.transport.isOpen():
                     self.transport.open()
-                self.links = self.client.grab_links(
+                self.links = self.link_graber(
                     DOWNLOADER_CONFIG['link_batch_size'])
                 self.transport.close()
                 if len(self.links) == 0:

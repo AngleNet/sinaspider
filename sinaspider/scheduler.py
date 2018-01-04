@@ -21,6 +21,7 @@ import sinaspider.services.ttypes as ttypes
 from sinaspider.config import *
 import sinaspider.utils
 import sinaspider.sina_pipeline
+from sinaspider.downloader import DownloaderType
 
 class SchedulerServiceHandler(scheduler_service.Iface):
     """
@@ -37,6 +38,7 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         self.idle_cookies = set()
         self.ready_links_generator = None
         self._link_batch_size = 0
+        self.topic_links = list()
         self.ready_links_db = None
         self.dead_links_db = None
         self._db_dir = join(dirname(dirname(abspath(__file__))), 'database')
@@ -171,6 +173,32 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         self.logger.debug('Receive %s links' % count)
         return ttypes.RetStatus.SUCCESS
 
+    def grab_topic_links(self, size):
+        """
+        Grab a batch of links.
+
+        In FIFO order.
+        Parameters:
+         - size
+        """
+        ret_links = []
+        for _ in range(min(size, len(self.topic_links))):
+            link = self.topic_links.pop(0)
+            ret_links.append(link)
+        self.logger.debug('%s topic links left.' % len(self.topic_links))
+        return ret_links
+
+    def submit_topic_links(self, links):
+        """
+        Submit a batch of links.
+
+        Parameters:
+         - links
+        """
+        self.topic_links.extend(links)
+        self.logger.debug('Receive %s topic links' % len(links))
+        return ttypes.RetStatus.SUCCESS
+ 
     def request_proxies(self, name, size):
         """
         Request a batch of living proxies.
@@ -350,12 +378,15 @@ class SchedulerServiceClient(object):
         self.running = True
         while self.running:
             try:
-                links = self.queue.get()
+                links, dtype = self.queue.get()
                 # Need to close the connection later to avoid unparallel
                 # threading.
                 if not self.transport.isOpen():
                     self.transport.open()
-                self.client.submit_links(links)
+                if dtype == DownloaderType.LINK_DOWNLOADER:
+                    self.client.submit_links(links)
+                elif dtype == DownloaderType.TOPIC_DOWNLOADER:
+                    self.client.submit_topic_links(links)
                 self.transport.close()
                 logger.debug('Submit links: %s' % links)
             except TTransport.TTransportException:
@@ -365,8 +396,8 @@ class SchedulerServiceClient(object):
             self.transport.close()
         logger.info('%s stopped.' % self.name)
 
-    def submit_links(self, links):
-        self.queue.put(links)
+    def submit_links(self, links, dtype=DownloaderType.LINK_DOWNLOADER):
+        self.queue.put((links, dtype))
 
     def stop(self):
         """

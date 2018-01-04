@@ -69,6 +69,16 @@ service scheduler_service{
     RetStatus submit_links(1: required list<string> links),
 
     /**
+     * Grab a batch of links.
+     */
+    list<string> grab_topic_links(1: required Integer size),
+
+    /**
+     * Submit a batch of links.
+     */
+    RetStatus submit_topic_links(1: required list<string> links),
+
+    /**
      * Request a living proxy.
      */
     ProxyAddress request_proxy(1: required string name),

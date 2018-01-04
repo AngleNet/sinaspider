@@ -75,6 +75,24 @@ class Iface(object):
         """
         pass
 
+    def grab_topic_links(self, size):
+        """
+        Grab a batch of links.
+
+        Parameters:
+         - size
+        """
+        pass
+
+    def submit_topic_links(self, links):
+        """
+        Submit a batch of links.
+
+        Parameters:
+         - links
+        """
+        pass
+
     def request_proxy(self, name):
         """
         Request a living proxy.
@@ -343,6 +361,72 @@ class Client(Iface):
             return result.success
         raise TApplicationException(TApplicationException.MISSING_RESULT, "submit_links failed: unknown result")
 
+    def grab_topic_links(self, size):
+        """
+        Grab a batch of links.
+
+        Parameters:
+         - size
+        """
+        self.send_grab_topic_links(size)
+        return self.recv_grab_topic_links()
+
+    def send_grab_topic_links(self, size):
+        self._oprot.writeMessageBegin('grab_topic_links', TMessageType.CALL, self._seqid)
+        args = grab_topic_links_args()
+        args.size = size
+        args.write(self._oprot)
+        self._oprot.writeMessageEnd()
+        self._oprot.trans.flush()
+
+    def recv_grab_topic_links(self):
+        iprot = self._iprot
+        (fname, mtype, rseqid) = iprot.readMessageBegin()
+        if mtype == TMessageType.EXCEPTION:
+            x = TApplicationException()
+            x.read(iprot)
+            iprot.readMessageEnd()
+            raise x
+        result = grab_topic_links_result()
+        result.read(iprot)
+        iprot.readMessageEnd()
+        if result.success is not None:
+            return result.success
+        raise TApplicationException(TApplicationException.MISSING_RESULT, "grab_topic_links failed: unknown result")
+
+    def submit_topic_links(self, links):
+        """
+        Submit a batch of links.
+
+        Parameters:
+         - links
+        """
+        self.send_submit_topic_links(links)
+        return self.recv_submit_topic_links()
+
+    def send_submit_topic_links(self, links):
+        self._oprot.writeMessageBegin('submit_topic_links', TMessageType.CALL, self._seqid)
+        args = submit_topic_links_args()
+        args.links = links
+        args.write(self._oprot)
+        self._oprot.writeMessageEnd()
+        self._oprot.trans.flush()
+
+    def recv_submit_topic_links(self):
+        iprot = self._iprot
+        (fname, mtype, rseqid) = iprot.readMessageBegin()
+        if mtype == TMessageType.EXCEPTION:
+            x = TApplicationException()
+            x.read(iprot)
+            iprot.readMessageEnd()
+            raise x
+        result = submit_topic_links_result()
+        result.read(iprot)
+        iprot.readMessageEnd()
+        if result.success is not None:
+            return result.success
+        raise TApplicationException(TApplicationException.MISSING_RESULT, "submit_topic_links failed: unknown result")
+
     def request_proxy(self, name):
         """
         Request a living proxy.
@@ -556,6 +640,8 @@ class Processor(Iface, TProcessor):
         self._processMap["resign_user_identity"] = Processor.process_resign_user_identity
         self._processMap["grab_links"] = Processor.process_grab_links
         self._processMap["submit_links"] = Processor.process_submit_links
+        self._processMap["grab_topic_links"] = Processor.process_grab_topic_links
+        self._processMap["submit_topic_links"] = Processor.process_submit_topic_links
         self._processMap["request_proxy"] = Processor.process_request_proxy
         self._processMap["request_proxies"] = Processor.process_request_proxies
         self._processMap["resign_proxy"] = Processor.process_resign_proxy
@@ -688,6 +774,44 @@ class Processor(Iface, TProcessor):
             logging.exception(ex)
             result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
         oprot.writeMessageBegin("submit_links", msg_type, seqid)
+        result.write(oprot)
+        oprot.writeMessageEnd()
+        oprot.trans.flush()
+
+    def process_grab_topic_links(self, seqid, iprot, oprot):
+        args = grab_topic_links_args()
+        args.read(iprot)
+        iprot.readMessageEnd()
+        result = grab_topic_links_result()
+        try:
+            result.success = self._handler.grab_topic_links(args.size)
+            msg_type = TMessageType.REPLY
+        except (TTransport.TTransportException, KeyboardInterrupt, SystemExit):
+            raise
+        except Exception as ex:
+            msg_type = TMessageType.EXCEPTION
+            logging.exception(ex)
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+        oprot.writeMessageBegin("grab_topic_links", msg_type, seqid)
+        result.write(oprot)
+        oprot.writeMessageEnd()
+        oprot.trans.flush()
+
+    def process_submit_topic_links(self, seqid, iprot, oprot):
+        args = submit_topic_links_args()
+        args.read(iprot)
+        iprot.readMessageEnd()
+        result = submit_topic_links_result()
+        try:
+            result.success = self._handler.submit_topic_links(args.links)
+            msg_type = TMessageType.REPLY
+        except (TTransport.TTransportException, KeyboardInterrupt, SystemExit):
+            raise
+        except Exception as ex:
+            msg_type = TMessageType.EXCEPTION
+            logging.exception(ex)
+            result = TApplicationException(TApplicationException.INTERNAL_ERROR, 'Internal error')
+        oprot.writeMessageBegin("submit_topic_links", msg_type, seqid)
         result.write(oprot)
         oprot.writeMessageEnd()
         oprot.trans.flush()
@@ -1567,6 +1691,264 @@ class submit_links_result(object):
         return not (self == other)
 
 
+class grab_topic_links_args(object):
+    """
+    Attributes:
+     - size
+    """
+
+    thrift_spec = (
+        None,  # 0
+        (1, TType.I32, 'size', None, None, ),  # 1
+    )
+
+    def __init__(self, size=None,):
+        self.size = size
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, (self.__class__, self.thrift_spec))
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.I32:
+                    self.size = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, (self.__class__, self.thrift_spec)))
+            return
+        oprot.writeStructBegin('grab_topic_links_args')
+        if self.size is not None:
+            oprot.writeFieldBegin('size', TType.I32, 1)
+            oprot.writeI32(self.size)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        if self.size is None:
+            raise TProtocolException(message='Required field size is unset!')
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
+class grab_topic_links_result(object):
+    """
+    Attributes:
+     - success
+    """
+
+    thrift_spec = (
+        (0, TType.LIST, 'success', (TType.STRING, 'UTF8', False), None, ),  # 0
+    )
+
+    def __init__(self, success=None,):
+        self.success = success
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, (self.__class__, self.thrift_spec))
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 0:
+                if ftype == TType.LIST:
+                    self.success = []
+                    (_etype17, _size14) = iprot.readListBegin()
+                    for _i18 in range(_size14):
+                        _elem19 = iprot.readString().decode('utf-8') if sys.version_info[0] == 2 else iprot.readString()
+                        self.success.append(_elem19)
+                    iprot.readListEnd()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, (self.__class__, self.thrift_spec)))
+            return
+        oprot.writeStructBegin('grab_topic_links_result')
+        if self.success is not None:
+            oprot.writeFieldBegin('success', TType.LIST, 0)
+            oprot.writeListBegin(TType.STRING, len(self.success))
+            for iter20 in self.success:
+                oprot.writeString(iter20.encode('utf-8') if sys.version_info[0] == 2 else iter20)
+            oprot.writeListEnd()
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
+class submit_topic_links_args(object):
+    """
+    Attributes:
+     - links
+    """
+
+    thrift_spec = (
+        None,  # 0
+        (1, TType.LIST, 'links', (TType.STRING, 'UTF8', False), None, ),  # 1
+    )
+
+    def __init__(self, links=None,):
+        self.links = links
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, (self.__class__, self.thrift_spec))
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 1:
+                if ftype == TType.LIST:
+                    self.links = []
+                    (_etype24, _size21) = iprot.readListBegin()
+                    for _i25 in range(_size21):
+                        _elem26 = iprot.readString().decode('utf-8') if sys.version_info[0] == 2 else iprot.readString()
+                        self.links.append(_elem26)
+                    iprot.readListEnd()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, (self.__class__, self.thrift_spec)))
+            return
+        oprot.writeStructBegin('submit_topic_links_args')
+        if self.links is not None:
+            oprot.writeFieldBegin('links', TType.LIST, 1)
+            oprot.writeListBegin(TType.STRING, len(self.links))
+            for iter27 in self.links:
+                oprot.writeString(iter27.encode('utf-8') if sys.version_info[0] == 2 else iter27)
+            oprot.writeListEnd()
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        if self.links is None:
+            raise TProtocolException(message='Required field links is unset!')
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
+class submit_topic_links_result(object):
+    """
+    Attributes:
+     - success
+    """
+
+    thrift_spec = (
+        (0, TType.I32, 'success', None, None, ),  # 0
+    )
+
+    def __init__(self, success=None,):
+        self.success = success
+
+    def read(self, iprot):
+        if iprot._fast_decode is not None and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None:
+            iprot._fast_decode(self, iprot, (self.__class__, self.thrift_spec))
+            return
+        iprot.readStructBegin()
+        while True:
+            (fname, ftype, fid) = iprot.readFieldBegin()
+            if ftype == TType.STOP:
+                break
+            if fid == 0:
+                if ftype == TType.I32:
+                    self.success = iprot.readI32()
+                else:
+                    iprot.skip(ftype)
+            else:
+                iprot.skip(ftype)
+            iprot.readFieldEnd()
+        iprot.readStructEnd()
+
+    def write(self, oprot):
+        if oprot._fast_encode is not None and self.thrift_spec is not None:
+            oprot.trans.write(oprot._fast_encode(self, (self.__class__, self.thrift_spec)))
+            return
+        oprot.writeStructBegin('submit_topic_links_result')
+        if self.success is not None:
+            oprot.writeFieldBegin('success', TType.I32, 0)
+            oprot.writeI32(self.success)
+            oprot.writeFieldEnd()
+        oprot.writeFieldStop()
+        oprot.writeStructEnd()
+
+    def validate(self):
+        return
+
+    def __repr__(self):
+        L = ['%s=%r' % (key, value)
+             for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not (self == other)
+
+
 class request_proxy_args(object):
     """
     Attributes:
@@ -1790,11 +2172,11 @@ class request_proxies_result(object):
             if fid == 0:
                 if ftype == TType.LIST:
                     self.success = []
-                    (_etype17, _size14) = iprot.readListBegin()
-                    for _i18 in range(_size14):
-                        _elem19 = ProxyAddress()
-                        _elem19.read(iprot)
-                        self.success.append(_elem19)
+                    (_etype31, _size28) = iprot.readListBegin()
+                    for _i32 in range(_size28):
+                        _elem33 = ProxyAddress()
+                        _elem33.read(iprot)
+                        self.success.append(_elem33)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -1811,8 +2193,8 @@ class request_proxies_result(object):
         if self.success is not None:
             oprot.writeFieldBegin('success', TType.LIST, 0)
             oprot.writeListBegin(TType.STRUCT, len(self.success))
-            for iter20 in self.success:
-                iter20.write(oprot)
+            for iter34 in self.success:
+                iter34.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -1995,11 +2377,11 @@ class submit_proxies_args(object):
             if fid == 1:
                 if ftype == TType.LIST:
                     self.addrs = []
-                    (_etype24, _size21) = iprot.readListBegin()
-                    for _i25 in range(_size21):
-                        _elem26 = ProxyAddress()
-                        _elem26.read(iprot)
-                        self.addrs.append(_elem26)
+                    (_etype38, _size35) = iprot.readListBegin()
+                    for _i39 in range(_size35):
+                        _elem40 = ProxyAddress()
+                        _elem40.read(iprot)
+                        self.addrs.append(_elem40)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -2016,8 +2398,8 @@ class submit_proxies_args(object):
         if self.addrs is not None:
             oprot.writeFieldBegin('addrs', TType.LIST, 1)
             oprot.writeListBegin(TType.STRUCT, len(self.addrs))
-            for iter27 in self.addrs:
-                iter27.write(oprot)
+            for iter41 in self.addrs:
+                iter41.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         oprot.writeFieldStop()
@@ -2247,11 +2629,11 @@ class submit_cookies_args(object):
             if fid == 1:
                 if ftype == TType.LIST:
                     self.cookies = []
-                    (_etype31, _size28) = iprot.readListBegin()
-                    for _i32 in range(_size28):
-                        _elem33 = Cookie()
-                        _elem33.read(iprot)
-                        self.cookies.append(_elem33)
+                    (_etype45, _size42) = iprot.readListBegin()
+                    for _i46 in range(_size42):
+                        _elem47 = Cookie()
+                        _elem47.read(iprot)
+                        self.cookies.append(_elem47)
                     iprot.readListEnd()
                 else:
                     iprot.skip(ftype)
@@ -2268,8 +2650,8 @@ class submit_cookies_args(object):
         if self.cookies is not None:
             oprot.writeFieldBegin('cookies', TType.LIST, 1)
             oprot.writeListBegin(TType.STRUCT, len(self.cookies))
-            for iter34 in self.cookies:
-                iter34.write(oprot)
+            for iter48 in self.cookies:
+                iter48.write(oprot)
             oprot.writeListEnd()
             oprot.writeFieldEnd()
         oprot.writeFieldStop()

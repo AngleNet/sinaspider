@@ -109,6 +109,7 @@ class UserIdentity(object):
     def __hash__(self):
         return hash((self.name, self.pwd))
 
+
 class ProxyAddress(object):
     """
     Proxy address.
@@ -188,6 +189,7 @@ class ProxyAddress(object):
 
     def __hash__(self):
         return hash((self.addr, self.port))
+
 
 
 class Cookie(object):

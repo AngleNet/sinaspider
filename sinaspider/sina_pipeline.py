@@ -9,9 +9,11 @@ import pickle
 import plyvel
 import re
 import urllib.parse
+import time
 
 from sinaspider.pipeline import Pipeline, PipelineNode
 from sinaspider.config import  PIPELINE_CONFIG
+from sinaspider.downloader import DownloaderType
 
 ### Links
 _USER_TWEETS_LINKS = {
@@ -36,6 +38,8 @@ _USER_HOME_LINK = {
     'nick': 'https://www.weibo.com/n/%s'
 }
 _TWEET_LONGTEXT_LINK = 'https://weibo.com/p/aj/mblog/getlongtext?ajwvr=6&mid=%s&tweet=%s'
+_TOPIC_PAGE_LINK =  'https://d.weibo.com/100803?pids=Pl_Discover_Pt6Rank__5&cfs=920'\
+                    '&Pl_Discover_Pt6Rank__5_filter=hothtlist_type=1&Pl_Discover_Pt6Rank__5_page=%s'
 
 
 ### Data Structures
@@ -98,6 +102,23 @@ class SinaTweet(Serializable):
     def json(self):
         return json.dumps(self.__dict__)
 
+class SinaTopic(Serializable):
+    def __init__(self):
+        self.tid = ''
+        self.brief = ''
+        self.num_reads = 0
+        self.num_disscuss = 0
+        self.num_fans = 0
+        self.name = ''
+        self.labels = ''
+        self.location = ''
+        self.timestamp = 0 
+
+    def __repr__(self):
+        L = ['%s=%s' % (key, value)
+            for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
 class SinaFlow(Serializable):
     def __init__(self):
         """
@@ -119,6 +140,8 @@ class SinaResponseType(aenum.Enum):
     USER_INFO= aenum.auto()     # weibo.com/p/1005052840177141/info 
     USER_WEIBO = aenum.auto()   # weibo.com/p/aj/v6/mblog/mbloglist
     USER_HOME = aenum.auto()    # user homepage. Get page_id
+    TRENDING_TOPIC_PAGE = aenum.auto()
+    TRENDING_TOPIC = aenum.auto()
 
     UNDEFINED = aenum.auto()    
 
@@ -133,17 +156,23 @@ class SinaResponse(object):
 class SinaPipeline(Pipeline):
     """
     The Pipeline seems like:
-             +-----+    +----->LongTextWeiboProcessor--->LevelDBWriter
-             |     |   /
-             |     +--/   ---->TrendingWeiboProcessor--->LevelDBWriter
-             |  R  |     / 
-     ------->|  O  +----/  --->UserWeiboProcessor--->LevelDBWriter
-     Response|  U  +------/
-     ------->|  T  +---------->UserInfoprocessor--->LevelDBWriter
-             |  E  +----+
-             |  R  +--+  \---->RepostListProcessor--->LevelDBWriter
-             |     |   \
-             +-----+    \----->UserHomePageProcessor
+
+             +-----+     +---->LongTextWeiboProcessor--->LevelDBWriter
+             |     |    /
+             |     |   /  +--->TrendingWeiboProcessor--->LevelDBWriter
+             |     +--/  / 
+             |  R  +----/  +-->UserWeiboProcessor--->LevelDBWriter
+    -------->|  O  +------/
+     Response|  U  +---------->UserInfoprocessor--->LevelDBWriter
+    -------->|  T  +------+
+             |  E  +----+   \---->RepostListProcessor--->LevelDBWriter
+             |  R  +--+  \
+             |     ++  \  \----->UserHomePageProcessor
+             |     | \  \
+             |     |  \  \------>TrendingTopicPageProcessor
+             +-----+   \
+                        \-------->TrendingTopicPageProcessor--->LevelDBWriter
+
     """
     def __init__(self, queue):
         router = Router()
@@ -161,12 +190,17 @@ class SinaPipeline(Pipeline):
         puweibo = UserWeiboProcessor()
         puweibo.forward(wtlevdb)
         puhome = UserHomePageProcessor()
+        ptopic = TrendingTopicProcessor()
+        ptopic.forward(wtlevdb)
+        pptopic = TrendingTopicPageProcessor()
         router.forward(pltextweibo)
         router.forward(ptrweibo)
         router.forward(prelist)
         router.forward(puinfo)
         router.forward(puweibo)
         router.forward(puhome)
+        router.forward(ptopic)
+        router.forward(pptopic)
 
 
 class Router(PipelineNode):
@@ -179,7 +213,10 @@ class Router(PipelineNode):
         url = urllib.parse.urlsplit(response.url)
         response = SinaResponse(SinaResponseType.UNDEFINED, response)
         if url.netloc == 'd.weibo.com':
-            response.type = SinaResponseType.TRENDING_WEIBO
+            if 'mblog/mbloglist' in url.path:
+                response.type = SinaResponseType.TRENDING_WEIBO
+            elif '100803' in url.path:
+                response.type = SinaResponseType.TRENDING_TOPIC_PAGE
         elif 'weibo.com' in url.netloc:
             if 'mblog/getlongtext' in url.path:
                 response.type = SinaResponseType.LONG_TEXT_WEIBO
@@ -189,6 +226,8 @@ class Router(PipelineNode):
                 response.type = SinaResponseType.USER_INFO
             elif '/p/aj/v6/mblog/mbloglist' == url.path:
                 response.type = SinaResponseType.USER_WEIBO
+            elif 'p/100808' in url.path:
+                response.type = SinaResponseType.TRENDING_TOPIC
             elif '/sorry' in url.path: 
                 pass # Bypass
             else:
@@ -473,6 +512,46 @@ class LongTextWeiboProcessor(PipelineNode):
                 logger.exception('Exception while handling %s' % debug_str_response(response))
         return (list(),)
 
+class TrendingTopicPageProcessor(PipelineNode):
+    def __init__(self):
+        PipelineNode.__init__(self, self.__class__.__name__)
+    
+    def run(self, client, response):
+        if response.type != SinaResponseType.TRENDING_TOPIC_PAGE:
+            return None
+        response = response.response
+        logger = logging.getLogger(self.name)
+        logger.debug('Get response: %s' % debug_str_response(response))
+        try:
+            content = decode_response_text(response)
+            content = strip_text_wight_blank(content)
+            links = topic_page_parser(content)
+            client.submit_links(links, DownloaderType.TOPIC_DOWNLOADER)
+        except Exception:
+            logger.exception('Exception while handling %s' % debug_str_response(response))
+
+class TrendingTopicProcessor(PipelineNode):
+    def __init__(self):
+        PipelineNode.__init__(self, self.__class__.__name__)
+    
+    def run(self, client, response):
+        if response.type != SinaResponseType.TRENDING_TOPIC:
+            return None
+        response = response.response
+        logger = logging.getLogger(self.name)
+        logger.debug('Get response: %s' % debug_str_response(response))
+        topics = list()
+        try:
+            content = decode_response_text(response)
+            content = strip_text_wight_blank(content)
+            topic = SinaTopic()
+            topic_parser(content, topic)
+            topics.append(topic)
+        except Exception:
+            logger.exception('Exception while handling %s' % debug_str_response(response))
+        return (topics, )
+
+
 class LevelDBWriter(PipelineNode):
     def __init__(self):
         PipelineNode.__init__(self, self.__class__.__name__)
@@ -482,7 +561,8 @@ class LevelDBWriter(PipelineNode):
         self.db_name_map = {
             'SinaTweet': 'tweets.db',
             'SinaUser': 'users.db',
-            'SinaFlow': 'flows.db'
+            'SinaFlow': 'flows.db',
+            'SinaTopic': 'topics.db'
         }
     
     def run(self, client, *kws):
@@ -510,6 +590,10 @@ class LevelDBWriter(PipelineNode):
                     wb.put(pickle.dumps(entry.tid), entry.serialize())
                     for entry in entries:
                         wb.put(pickle.dumps(entry.tid), entry.serialize())
+                elif type(entry) is SinaTopic:
+                    wb.put(pickle.dumps((entry.timestamp, entry.tid)), entry.serialize())
+                    for entry in entries:
+                        wb.put(pickle.dumps((entry.timestamp, entry.tid)), entry.serialize())
                 wb.write()
                 db.close()
             except Exception:
@@ -594,12 +678,12 @@ def user_info_html_parser(html, user):
     for script in BeautifulSoup(html, 'lxml').find_all('script'):
         if "$CONFIG['page_id']" in str(script):
             config_box = script.contents[0]
-        elif 'Pl_Core_T8CustomTriColumn__' in str(script):
+        elif '"domid":"Pl_Core_T8CustomTriColumn__' in str(script):
             number_box = str(script)
-        elif 'Pl_Core_UserInfo__' in str(script) or \
-            'Pl_Official_PersonalInfo__' in str(script):
+        elif '"domid":"Pl_Core_UserInfo__' in str(script) or \
+            '"domid":"Pl_Official_PersonalInfo__' in str(script):
             info_box = str(script)
-        elif 'Pl_Official_RightGrowNew__' in str(script):
+        elif '"domid":"Pl_Official_RightGrowNew__' in str(script):
             level_box = str(script)
     if config_box:
         for value in config_box.split(';'):
@@ -869,6 +953,73 @@ def retweet_list_page_parser(html, otid, ouid):
         tweets.append(tweet)
     return (tweets, flows)
 
+# Trending topics
+def topic_page_parser(html):
+    """
+    Return a list of links of topics.
+    """
+    links = set()
+    topics_box = ''
+    for script in BeautifulSoup(html, 'lxml').find_all('script'):
+        if '"domid":"Pl_Discover_Pt6Rank__5"' in str(script):
+            topics_box = str(script)
+            break
+    topics_box = extract_html_from_script(topics_box)
+    topics_box = BeautifulSoup(topics_box, 'lxml')
+    for topic_box in topics_box.find_all('div', 'pic_box'):
+        link = 'https:%s' % topic_box.a.attrs['href']
+        links.add(link)
+    return links
+
+def topic_parser(html, topic):
+    soup = BeautifulSoup(html, 'lxml')
+    desc_box = soup.find('meta', attrs={'name': 'description'})
+    if desc_box:
+        topic.brief = desc_box.attrs['content']
+    config_box = ''
+    number_box = ''
+    lable_box = ''
+    topic.timestamp = round(time.time())
+    for script in soup.find_all('script'):
+        if "$CONFIG['page_id']" in str(script):
+            config_box = script.contents[0]
+        elif '"domid":"Pl_Core_T8CustomTriColumn' in str(script):
+            number_box = str(script)
+        elif '"domid":"Pl_Core_T5MultiText' in str(script):
+            lable_box = str(script)
+    if config_box:
+        for value in config_box.split(';'):
+            if "['page_id']" in value:
+                topic.tid = value.split("'")[-2]
+            elif "['onick']" in value:
+                topic.name = value.split("'")[-2]
+    if number_box:
+        number_box = extract_html_from_script(number_box)
+        number_box = BeautifulSoup(number_box, 'lxml')
+        for box in number_box.find_all('td', 'S_line1'):
+            name = box.span.contents[0].strip()
+            number = box.strong.contents[0].strip()
+            if name == '阅读':
+                topic.num_reads = wordsToNum(number)
+            elif name == '讨论':
+                topic.num_disscuss = wordsToNum(number)
+            elif name == '粉丝':
+                topic.num_fans = wordsToNum(number)
+    if lable_box:
+        lable_box = extract_html_from_script(lable_box)
+        lable_box = BeautifulSoup(lable_box, 'lxml')
+        for box in lable_box.find_all('li', 'li_1'):
+            title_box = box.find('span', 'pt_title')
+            detail_box = box.find('span', 'pt_detail')
+            if not title_box or not detail_box:
+                continue
+            title = title_box.get_text(strip=True)
+            detail = detail_box.get_text('|', strip=True)
+            if '分类' in title:
+                topic.labels = detail
+            elif '地区' in title:
+                topic.location = detail
+ 
 # Others
 def extract_html_from_script(script):
     if '<html>' in script or 'html' not in script:
@@ -881,3 +1032,14 @@ def generate_user_links(tweets):
         link = _USER_HOME_LINK['id'] % tweet.uid
         links.add(link)
     return links
+
+def wordsToNum(s):
+    if s == '':
+        return 0 
+    s = s.strip()
+    if s[-1] == '亿':
+        return round(float(s[0:-1]) * 100000000)
+    elif s[-1] == '万':
+        return round(float(s[0:-1]) * 10000)
+    else:
+        return round(float(s))

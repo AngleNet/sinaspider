@@ -30,6 +30,8 @@ if len(sys.argv) <= 1 or sys.argv[1] == '--help':
     print('  RetStatus resign_user_identity(UserIdentity pair, string name)')
     print('   grab_links(Integer size)')
     print('  RetStatus submit_links( links)')
+    print('   grab_topic_links(Integer size)')
+    print('  RetStatus submit_topic_links( links)')
     print('  ProxyAddress request_proxy(string name)')
     print('   request_proxies(string name, Integer size)')
     print('  RetStatus resign_proxy(ProxyAddress addr, string name)')
@@ -150,6 +152,18 @@ elif cmd == 'submit_links':
         print('submit_links requires 1 args')
         sys.exit(1)
     pp.pprint(client.submit_links(eval(args[0]),))
+
+elif cmd == 'grab_topic_links':
+    if len(args) != 1:
+        print('grab_topic_links requires 1 args')
+        sys.exit(1)
+    pp.pprint(client.grab_topic_links(eval(args[0]),))
+
+elif cmd == 'submit_topic_links':
+    if len(args) != 1:
+        print('submit_topic_links requires 1 args')
+        sys.exit(1)
+    pp.pprint(client.submit_topic_links(eval(args[0]),))
 
 elif cmd == 'request_proxy':
     if len(args) != 1:

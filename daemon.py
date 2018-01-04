@@ -13,7 +13,7 @@ import uuid
 import requests
 
 import sinaspider.config
-import sinaspider.downloader
+from sinaspider.downloader import Downloader, DownloaderType
 import sinaspider.log
 import sinaspider.pipeline
 import sinaspider.scheduler
@@ -66,13 +66,14 @@ class StoreCookie(object):
         print('Complete.')
 
 
-class SeedLinkSubmitDaemon(sinaspider.utils.Daemon):
+class HotWeiboLinkSeederDaemon(sinaspider.utils.Daemon):
     def __init__(self, pid_file):
         sinaspider.utils.Daemon.__init__(
             self, pid_file, self.__class__.__name__)
         self.links = []
         self.links.append(sinaspider.sina_pipeline._TRENDING_TWEETS_LINK + '&uuid=%s')
         self.running = True 
+        self.interval = sinaspider.config.SCHEDULER_CONFIG['hot_weibo_link_seeder_interval']
     def run(self):
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
@@ -84,20 +85,49 @@ class SeedLinkSubmitDaemon(sinaspider.utils.Daemon):
         client = sinaspider.services.scheduler_service.Client(protocol)
         self.running = True
         while self.running:
+            time.sleep(self.interval)
             if not transport.isOpen():
                 transport.open()
             patch = uuid.uuid4().hex
             links = [link % patch for link in self.links]
             client.submit_links(links)
             transport.close()
-            time.sleep(2)
         transport.close()
  
     def exit_gracefully(self, sig, func):
         self.running = False
  
-
-
+class TopicLinkSeederDeamon(sinaspider.utils.Daemon):
+    def __init__(self, pid_file):
+        sinaspider.utils.Daemon.__init__(
+            self, pid_file, self.__class__.__name__)
+        self.links = []
+        for idx in range(1, sinaspider.config.DOWNLOADER_CONFIG['num_topic_pages']+1):
+            link = sinaspider.sina_pipeline._TOPIC_PAGE_LINK % idx
+            self.links.append(link)
+        self.running = True 
+        self.interval = sinaspider.config.SCHEDULER_CONFIG['topic_link_seeder_interval']
+    def run(self):
+        signal.signal(signal.SIGINT, self.exit_gracefully)
+        signal.signal(signal.SIGTERM, self.exit_gracefully)
+        addr = sinaspider.config.SCHEDULER_CONFIG['addr']
+        port = sinaspider.config.SCHEDULER_CONFIG['port']
+        transport = thrift.transport.TSocket.TSocket(addr, port)
+        transport = thrift.transport.TTransport.TBufferedTransport(transport)
+        protocol = thrift.protocol.TBinaryProtocol.TBinaryProtocol(transport)
+        client = sinaspider.services.scheduler_service.Client(protocol)
+        self.running = True
+        while self.running:
+            time.sleep(self.interval)
+            if not transport.isOpen():
+                transport.open()
+            client.submit_topic_links(self.links)
+            transport.close()
+        transport.close()
+ 
+    def exit_gracefully(self, sig, func):
+        self.running = False
+ 
 class SinaSpiderDaemon(sinaspider.utils.Daemon):
     def __init__(self, pid_file):
         sinaspider.utils.Daemon.__init__(
@@ -126,7 +156,14 @@ class SinaSpiderDaemon(sinaspider.utils.Daemon):
             name = sinaspider.config.DOWNLOADER_CONFIG['name_prefix'] + '-' + str(
                 idx)
             logger.debug('Creating %s' % name)
-            downloader = sinaspider.downloader.Downloader(name, pipeline)
+            downloader = Downloader(name, pipeline, DownloaderType.LINK_DOWNLOADER)
+            self.downloaders.append(downloader)
+        for idx in range(
+                sinaspider.config.DOWNLOADER_CONFIG['num_topic_downloaders']):
+            name = 'topic-' + sinaspider.config.DOWNLOADER_CONFIG['name_prefix'] + '-' + str(
+                idx)
+            logger.debug('Creating %s' % name)
+            downloader = Downloader(name, pipeline, DownloaderType.TOPIC_DOWNLOADER)
             self.downloaders.append(downloader)
 
         self.timer = sinaspider.utils.RepeatingTimer(
@@ -159,7 +196,6 @@ class SinaSpiderDaemon(sinaspider.utils.Daemon):
             logger.debug('Updating proxies of %s' % downloader.name)
             downloader.update_proxies_callback()
         logger.info('Proxies updated.')
-        
 
 
 if __name__ == '__main__':
@@ -173,8 +209,10 @@ if __name__ == '__main__':
             daemon = sinaspider.scheduler.SchedulerServerDaemon(pid_file)
         elif target == 'spider':
             daemon = SinaSpiderDaemon(pid_file)
-        elif target == 'seeder':
-            daemon = SeedLinkSubmitDaemon(pid_file)
+        elif target == 'weibo_seeder':
+            daemon = HotWeiboLinkSeederDaemon(pid_file)
+        elif target == 'topic_seeder':
+            daemon = TopicLinkSeederDeamon(pid_file)
         elif target == 'loginer':
             daemon = StoreCookie()
         elif target == 'uploader':
