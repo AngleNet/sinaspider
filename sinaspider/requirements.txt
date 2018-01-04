@@ -1,0 +1,6 @@
+rsa==3.4.2
+plyvel==0.9
+requests==2.7.0
+thrift==0.10.0
+aenum==2.0.9
+beautifulsoup4==4.6.0
