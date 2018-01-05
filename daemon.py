@@ -85,14 +85,15 @@ class HotWeiboLinkSeederDaemon(sinaspider.utils.Daemon):
         client = sinaspider.services.scheduler_service.Client(protocol)
         self.running = True
         while self.running:
-            time.sleep(self.interval)
             if not transport.isOpen():
                 transport.open()
             patch = uuid.uuid4().hex
             links = [link % patch for link in self.links]
             client.submit_links(links)
             transport.close()
-        transport.close()
+            time.sleep(self.interval)
+        if not transport.isOpen():
+            transport.close()
  
     def exit_gracefully(self, sig, func):
         self.running = False
@@ -118,12 +119,13 @@ class TopicLinkSeederDeamon(sinaspider.utils.Daemon):
         client = sinaspider.services.scheduler_service.Client(protocol)
         self.running = True
         while self.running:
-            time.sleep(self.interval)
             if not transport.isOpen():
                 transport.open()
             client.submit_topic_links(self.links)
             transport.close()
-        transport.close()
+            time.sleep(self.interval)
+        if not transport.isOpen():
+            transport.close()
  
     def exit_gracefully(self, sig, func):
         self.running = False
