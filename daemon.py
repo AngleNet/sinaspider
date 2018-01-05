@@ -56,11 +56,15 @@ class StoreCookie(object):
             print('\tLogin %s...' % (user.name), end='')
             loginer = sinaspider.sina_login.SinaSessionLoginer(session)
             loginer.login(user)
-            print('SUCCESS')
-            cookie = ''
-            for key, value in requests.utils.dict_from_cookiejar(session.cookies).items():
-                cookie += '%s=%s;' % (key, value)
-            cookies[user.name] = cookie
+            cookies_dict = requests.utils.dict_from_cookiejar(session.cookies)
+            if 'SUB' in cookies_dict and 'SUBP' in cookies_dict:
+                print('SUCCESS')
+                cookie = ''
+                for key, value in cookies_dict.items():
+                    cookie += '%s=%s;' % (key, value)
+                cookies[user.name] = cookie
+            else:
+                print('FAIL')
         with open('cookies.json', 'w+') as fd:
             json.dump(cookies, fd)
         print('Complete.')
