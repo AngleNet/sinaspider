@@ -193,10 +193,12 @@ class Downloader(threading.Thread):
         """
         Update the proxy list later via the timer.
         """
+        logger = logging.getLogger(self.name)
         if not self.transport.isOpen():
             self.transport.open()
         proxies = self.client.request_proxies(self.name, 
                         DOWNLOADER_CONFIG['proxy_pool_size'])
+        logger.debug('Get proxies: %s' % proxies)
         self.transport.close()
         new_proxies = list()
         for proxy in proxies:
@@ -205,7 +207,9 @@ class Downloader(threading.Thread):
                 'https': '%s:%s' % (proxy.addr, proxy.port)
             }
             new_proxies.append(_proxy)
+        logger.debug('Old proxies: %s' % self.proxies)
         self.proxy_lock.acquire()
         self.proxies = new_proxies
         self.proxy_lock.release()
+        logger.debug('New proxies: %s' % self.proxies)
 
