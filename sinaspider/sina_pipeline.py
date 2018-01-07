@@ -234,6 +234,18 @@ class Router(PipelineNode):
                 response.type = SinaResponseType.USER_HOME
         logger.debug('Route %s for %s' % (response.type, response.response.url))
         return (response,)
+
+class UndefinedProcessor(PipelineNode):
+    def __init__(self):
+        PipelineNode.__init__(self, self.__class__.__name__)
+    
+    def run(self, client, response):
+        if response.type != SinaResponseType.UNDEFINED:
+            return None
+        response = response.response
+        logger = logging.getLogger(self.name)
+        logger.warn('Get response: %s' % debug_str_response(response))
+        logger.warn('Content: %s' % response.text)
         
 
 class TrendingWeiboProcessor(PipelineNode):
