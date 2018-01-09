@@ -207,12 +207,15 @@ class SchedulerServiceHandler(scheduler_service.Iface):
          - name
          - size
         """
+        self.logger.info('%s requests %s proxies' % (name, size))
         proxies = list()
         self.proxy_lock.acquire()
         for _ in range(min(len(self.proxies), size)):
             proxy = self.proxies.pop()
             proxies.append(proxy)
+        left_size = len(self.proxies)
         self.proxy_lock.release()
+        self.logger.info('%s proxies left' % left_size)
         return  proxies
         
     def request_cookie(self, name):
@@ -277,7 +280,7 @@ class SchedulerServiceHandler(scheduler_service.Iface):
             addr, port = entry.split(':')
             proxy = ttypes.ProxyAddress(addr, int(port))
             new_proxies.add(proxy)
-        self.logger.debug('New proxies: %s' % new_proxies)
+        self.logger.debug('Number of new proxies: %s' % new_proxies)
         self.proxy_lock.acquire()
         self.proxies = new_proxies
         self.proxy_lock.release()
