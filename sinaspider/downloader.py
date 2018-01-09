@@ -10,6 +10,7 @@ import threading
 import time
 from thrift.protocol import TBinaryProtocol
 from thrift.transport import TTransport, TSocket
+import uuid
 
 from sinaspider.config import *
 from sinaspider.services.scheduler_service import Client
@@ -61,6 +62,7 @@ class Downloader(threading.Thread):
         elif dtype == DownloaderType.UNDEFINED:
             import os
             os._exit(1)
+        self.downloader_type = dtype
  
 
     def run(self):
@@ -118,6 +120,14 @@ class Downloader(threading.Thread):
             # TODO: submit uncrawled links to scheduler.
             logger.debug('Unregiser downloader.')
             self.client.unregister_downloader(self.name)
+            if len(self.links) > 0:
+                if self.downloader_type == DownloaderType.LINK_DOWNLOADER:
+                    for idx in range(len(self.links)):
+                        patch = '&uuid=%s' % uuid.uuid4().hex
+                        self.links[idx] = self.links[idx] + patch
+                    self.client.submit_links(self.links)
+                elif self.downloader_type == DownloaderType.TOPIC_DOWNLOADER:
+                    self.client.submit_topic_links(self.links)
             logger.debug('Closing connection to scheduler.')
             self.transport.close()
         logger.info('Downloader stopped.')
