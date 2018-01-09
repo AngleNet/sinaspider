@@ -115,7 +115,6 @@ class Downloader(threading.Thread):
                 logger.exception('Unkown failure, exiting...')
                 self.downloading = False
 
-
         if self.transport.isOpen():
             # TODO: submit uncrawled links to scheduler.
             logger.debug('Unregiser downloader.')
@@ -161,7 +160,7 @@ class Downloader(threading.Thread):
                 logger.info('Session expired. Relogin...')
                 #self.loginer.login(self.user_identity)
                 self._update_cookie()
-            except requests.RequestException:
+            except Exception:
                 logger.exception('Exception in downloading %s' % link)
         return None  # Exiting
 

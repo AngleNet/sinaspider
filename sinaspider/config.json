@@ -20,7 +20,7 @@
     },
     "PIPELINE":{
         "engine_pool_size": 2,
-        "user_tweets_date": 201712
+        "user_tweets_date": 201801
     },
     "SCHEDULER_SERVICE":{
         "addr": "221.207.30.251",
