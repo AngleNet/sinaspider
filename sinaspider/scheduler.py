@@ -32,6 +32,7 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         self.logger = None
         self.downloaders = dict() # Keep alive downloaders along with other resources
         self.user_identities = set() # Keep unused user identities
+        self.idle_proxies = set()
         self.proxies = set() # Keeps all of proxies
         self.proxy_lock = threading.Lock()
         self.cookies = dict()
@@ -209,12 +210,12 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         """
         self.logger.info('%s requests %s proxies' % (name, size))
         proxies = list()
-        self.proxy_lock.acquire()
-        for _ in range(min(len(self.proxies), size)):
-            proxy = self.proxies.pop()
+        if len(self.idle_proxies) < size:
+            self.idle_proxies.update(self.proxies)
+        for _ in range(min(len(self.idle_proxies), size)):
+            proxy = self.idle_proxies.pop()
             proxies.append(proxy)
-        left_size = len(self.proxies)
-        self.proxy_lock.release()
+        left_size = len(self.idle_proxies)
         self.logger.info('%s proxies left' % left_size)
         return  proxies
         
@@ -280,11 +281,8 @@ class SchedulerServiceHandler(scheduler_service.Iface):
             addr, port = entry.split(':')
             proxy = ttypes.ProxyAddress(addr, int(port))
             new_proxies.add(proxy)
-        self.logger.debug('Number of new proxies: %s' % new_proxies)
-        self.proxy_lock.acquire()
+        self.logger.debug('Number of new proxies: %s' % len(new_proxies))
         self.proxies = new_proxies
-        self.proxy_lock.release()
-        self.logger.info('Proxies updated.')
 
 class SchedulerServerDaemon(sinaspider.utils.Daemon, TServer.TServer):
     """

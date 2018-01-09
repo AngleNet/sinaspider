@@ -2,12 +2,12 @@
     "DOWNLOADER":{
         "link_batch_size": 30,
         "name_prefix": "downloader-qhcert",
-        "num_downloaders": 10,
-        "num_topic_downloaders": 5,
+        "num_downloaders": 8,
+        "num_topic_downloaders": 4,
         "num_topic_pages": 66,
         "sysbusy_wait_latency": 200,
         "cookie_update_interval": 10,
-        "proxy_pool_size": 10,
+        "proxy_pool_size": 4,
         "proxy_interval": 60,
         "requests_timeout": 5 
     },
