@@ -140,7 +140,8 @@ class Downloader(threading.Thread):
                 proxy = random.choice(self.proxies)
                 self.proxy_lock.release()
                 logger.debug('Using proxy: %s' % proxy)
-                response = self.session.get(link, proxies=proxy)
+                response = self.session.get(link, proxies=proxy, 
+                        timeout=DOWNLOADER_CONFIG['requests_timeout'])
                 if 'weibo.com/sorry?sysbusy' in response.url:
                     #logger.debug('Too fast. Waiting...')
                     #time.sleep(DOWNLOADER_CONFIG['sysbusy_wait_latency'])

@@ -2,13 +2,14 @@
     "DOWNLOADER":{
         "link_batch_size": 1,
         "name_prefix": "downloader-test",
-        "num_downloaders": 4,
-        "num_topic_downloaders": 0,
+        "num_downloaders": 0,
+        "num_topic_downloaders": 8,
         "num_topic_pages": 66,
         "sysbusy_wait_latency": 200,
         "cookie_update_interval": 10,
         "proxy_pool_size": 10,
-        "proxy_interval": 60
+        "proxy_interval": 60,
+        "requests_timeout": 5 
     },
     "LOGGER":{
         "use_terminal": true,
@@ -90,8 +91,8 @@
        "proxy_provider":"http://104483346217327442.standard.hutoudaili.com/?num=%s&area_type=1&scheme=1&anonymity=3&order=3&style=2",
        "proxy_pool_size": 200,
        "proxy_interval": 60,
-       "topic_link_seeder_interval": 30,
-       "hot_weibo_link_seeder_interval": 30
+       "topic_link_seeder_interval": 60,
+       "hot_weibo_link_seeder_interval": 200 
     },
     "TEST":{
         "_comment": "Unit testing configures",
