@@ -581,35 +581,45 @@ class LevelDBWriter(PipelineNode):
         if not kws:
             return
         logger = logging.getLogger(self.name)
+        db = None
         for entries in kws:
-            try:
-                if not entries:
-                    continue
-                logger.debug('Writing: %s' % entries)
-                entry = entries.pop()
-                db_name = self.db_name_map.get(entry.__class__.__name__, 'error.db')
-                db = plyvel.DB(join(self.db_dir, db_name), create_if_missing=True) 
-                wb = db.write_batch()
-                if type(entry) is SinaFlow:
-                    wb.put(pickle.dumps(entry.a), pickle.dumps(entry.b))
-                    for entry in entries:
+            if not entries:
+                continue
+            for _ in range(PIPELINE_CONFIG['leveldb_max_retries']):
+                try:
+                    logger.debug('Writing: %s' % entries)
+                    entry = entries.pop()
+                    db_name = self.db_name_map.get(entry.__class__.__name__, 'error.db')
+                    db = plyvel.DB(join(self.db_dir, db_name), create_if_missing=True) 
+                    wb = db.write_batch()
+                    if type(entry) is SinaFlow:
                         wb.put(pickle.dumps(entry.a), pickle.dumps(entry.b))
-                elif type(entry) is SinaUser:
-                    wb.put(pickle.dumps(entry.uid), entry.serialize())
-                    for entry in entries:
+                        for entry in entries:
+                            wb.put(pickle.dumps(entry.a), pickle.dumps(entry.b))
+                    elif type(entry) is SinaUser:
                         wb.put(pickle.dumps(entry.uid), entry.serialize())
-                elif type(entry) is SinaTweet:
-                    wb.put(pickle.dumps(entry.tid), entry.serialize())
-                    for entry in entries:
+                        for entry in entries:
+                            wb.put(pickle.dumps(entry.uid), entry.serialize())
+                    elif type(entry) is SinaTweet:
                         wb.put(pickle.dumps(entry.tid), entry.serialize())
-                elif type(entry) is SinaTopic:
-                    wb.put(pickle.dumps((entry.timestamp, entry.tid)), entry.serialize())
-                    for entry in entries:
+                        for entry in entries:
+                            wb.put(pickle.dumps(entry.tid), entry.serialize())
+                    elif type(entry) is SinaTopic:
                         wb.put(pickle.dumps((entry.timestamp, entry.tid)), entry.serialize())
-                wb.write()
-                db.close()
-            except Exception:
-                logger.exception('Error while writing %s to LevelDB' % entries)
+                        for entry in entries:
+                            wb.put(pickle.dumps((entry.timestamp, entry.tid)), entry.serialize())
+                    wb.write()
+                    db.close()
+                    break
+                except plyvel._plyvel.IOError:
+                    logger.error('Error during writing %s, retry later.' % entries)
+                    time.sleep(PIPELINE_CONFIG['leveldb_retry_delay'])
+                except Exception:
+                    logger.exception('Error while writing %s to LevelDB' % entries)
+                    break
+                finally:
+                    if db and not db.closed:
+                        db.close()
 
 ### Utility functions 
 
