@@ -172,7 +172,11 @@ class Downloader(threading.Thread):
                 #self.loginer.login(self.user_identity)
                 self._update_cookie()
             except (requests.exceptions.ConnectTimeout, 
-                    requests.exceptions.ProxyError) as e:
+                    requests.exceptions.ProxyError,
+                    # Increase requests_timeout to handle this
+                    requests.exceptions.ReadTimeout, 
+                    # BadStatusLine aborts the connection
+                    requests.exceptions.ConnectionError) as e:
                 logger.warn('requests exception: %s' % e)
             except Exception:
                 logger.exception('Exception in downloading %s' % link)
@@ -227,8 +231,8 @@ class Downloader(threading.Thread):
         new_proxies = list()
         for proxy in proxies:
             _proxy = {
-                'http': '%s:%s' % (proxy.addr, proxy.port), 
-                'https': '%s:%s' % (proxy.addr, proxy.port)
+                'http': 'http://%s:%s' % (proxy.addr, proxy.port), 
+                'https': 'https://%s:%s' % (proxy.addr, proxy.port)
             }
             new_proxies.append(_proxy)
         logger.debug('Old proxies: %s' % self.proxies)
