@@ -1,6 +1,6 @@
 # SinaSpider
 
-A simple weibo spider which collects trending post messages.
+A simple weibo spider which collects trending post messages with Py3.5.
 
 ## Design
 
