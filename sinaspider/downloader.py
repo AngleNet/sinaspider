@@ -3,6 +3,7 @@ A multithread downloader.
 """
 
 import aenum
+import gevent
 import logging
 import random
 import requests
@@ -111,6 +112,7 @@ class Downloader(threading.Thread):
                     time.sleep(5)
             except TTransport.TTransportException:
                 logger.exception('Connection error.')
+                time.sleep(interval)
             except Exception:
                 logger.exception('Unkown failure, exiting...')
                 self.downloading = False
@@ -149,8 +151,17 @@ class Downloader(threading.Thread):
                 proxy = random.choice(self.proxies)
                 self.proxy_lock.release()
                 logger.debug('Using proxy: %s' % proxy)
-                response = self.session.get(link, proxies=proxy, 
-                        timeout=DOWNLOADER_CONFIG['requests_timeout'])
+                response = None
+                with gevent.Timeout(DOWNLOADER_CONFIG['requests_total_timeout'],
+                                    False):
+                    response = self.session.get(link, proxies=proxy, 
+                            timeout=DOWNLOADER_CONFIG['requests_timeout'],
+                            verify=False)
+                if response is None:
+                    logger.warn('Requests timeout')
+                    continue
+                _ = response.text
+                response.close()
                 if 'weibo.com/sorry?sysbusy' in response.url:
                     #logger.debug('Too fast. Waiting...')
                     #time.sleep(DOWNLOADER_CONFIG['sysbusy_wait_latency'])
@@ -160,6 +171,9 @@ class Downloader(threading.Thread):
                 logger.info('Session expired. Relogin...')
                 #self.loginer.login(self.user_identity)
                 self._update_cookie()
+            except (requests.exceptions.ConnectTimeout, 
+                    requests.exceptions.ProxyError) as e:
+                logger.warn('requests exception: %s' % e)
             except Exception:
                 logger.exception('Exception in downloading %s' % link)
         return None  # Exiting

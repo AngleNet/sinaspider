@@ -9,7 +9,8 @@
         "cookie_update_interval": 10,
         "proxy_pool_size": 4,
         "proxy_interval": 30,
-        "requests_timeout": 5 
+        "requests_timeout": 5,
+        "requests_total_timeout": 60
     },
     "LOGGER":{
         "use_terminal": true,
