@@ -279,6 +279,7 @@ class TrendingWeiboProcessor(PipelineNode):
             assert type(content_json) == type(dict())
             if content_json['code'] != '100000':
                 logger.debug('%s failed.' % response.url)
+                client.submit_links(response.url)
                 return # Failed, need retry.
             content = strip_text_wight_blank(content_json['data'])
             tweets, ltext_tweets, flows, pages = tweet_page_parser(content)
@@ -326,6 +327,7 @@ class RepostListProcessor(PipelineNode):
             content_json = decode_response_text(response)
             assert type(content_json) == type(dict())
             if content_json['code'] != '100000':
+                client.submit_links(response.url)
                 logger.debug('%s failed.' % response.url)
                 return # Failed, need retry.
             total_pages = content_json['data']['page']['totalpage']
@@ -441,6 +443,7 @@ class UserWeiboProcessor(PipelineNode):
             assert type(content_json) == type(dict())
             if content_json['code'] != '100000':
                 logger.debug('%s failed.' % response.url)
+                client.submit_links(response.url)
                 return # Failed, need retry.
             content = strip_text_wight_blank(content_json['data'])
             paging_info = False
@@ -502,6 +505,7 @@ class LongTextWeiboProcessor(PipelineNode):
                 assert type(content_json) == dict
                 if content_json['code'] != '100000':
                     logger.debug('%s failed.' % response.url)
+                    client.submit_links(response.url)
                     return # Failed, need retry.
                 content = strip_text_wight_blank(content_json['data']['html'])
                 box = BeautifulSoup(content, 'lxml')

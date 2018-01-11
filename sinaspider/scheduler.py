@@ -23,6 +23,10 @@ import sinaspider.utils
 import sinaspider.sina_pipeline
 from sinaspider.downloader import DownloaderType
 
+class LinkType:
+    LINK = 0
+    TOPIC_LINK = 1
+
 class SchedulerServiceHandler(scheduler_service.Iface):
     """
     A scheduler service.
@@ -37,44 +41,49 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         self.proxy_lock = threading.Lock()
         self.cookies = dict()
         self.idle_cookies = set()
-        self.ready_links_generator = None
         self._link_batch_size = 0
         self.topic_links = list()
+        self.links = set()
         self.ready_links_db = None
         self.dead_links_db = None
         self.dead_topic_links_db = None
         self._db_dir = join(dirname(dirname(abspath(__file__))), 'database')
         if not isdir(self._db_dir):
             os.makedirs(self._db_dir)
-        try:
-            pf = open(join(self._db_dir, 'link_numbers'), 'r')
-            self.num_links = int(pf.read().strip())
-            pf.close()
-        except Exception:
-            self.num_links = 0
-    
+   
     def init(self):
         self.logger = logging.getLogger(self.__class__.__name__)
         for ident in SCHEDULER_CONFIG['user_identity']:
             ident = ttypes.UserIdentity(ident['name'], ident['pwd'])
             self.user_identities.add(ident)
-        self.ready_links_db = plyvel.DB(join(self._db_dir, 'ready_links.db'),
+        self.links_db = plyvel.DB(join(self._db_dir, 'links.db'),
                                         create_if_missing=True)
+        for k, v in self.links_db:
+            ltype = pickle.loads(v)
+            link = pickle.loads(k)
+            if ltype == LinkType.LINK:
+                self.links.add(link)
+            elif ltype == LinkType.TOPIC_LINK:
+                self.topic_links.append(link)
+            else:
+                self.logger.error('Find unkown type link (%s, %s) when recover links' % (link, ltype))
         self.dead_links_db = plyvel.DB(join(self._db_dir, 'dead_links.db'),
                                         create_if_missing=True)
-        self.ready_links_generator = self._ready_links_generator()
-        total_links = self.ready_links_db.get(b'total_links')
-        if total_links:
-            self.num_links = pickle.loads(total_links)
         self.dead_topic_links_db = plyvel.DB(join(self._db_dir, 'dead_topic_links.db'),
                                             create_if_missing=True)
 
     def close(self):
-        with open(join(self._db_dir, 'link_numbers'), 'w+') as fd:
-            fd.write('%s\n' % self.num_links)
-        self.ready_links_db.close()
+        for k, v in self.links_db:
+            self.links_db.delete(k)
+        for link in self.links:
+            self.links_db.put(pickle.dumps(link), pickle.dumps(LinkType.LINK))
+        for link in self.topic_links:
+            self.links_db.put(pickle.dumps(link), pickle.dumps(LinkType.TOPIC_LINK))
+        self.links_db.close()
         self.dead_links_db.close()
         self.dead_topic_links_db.close()
+        self.logger.info('%s links left, %s topic links left' % (len(self.links), 
+                        len(self.topic_links)))
 
     def register_downloader(self, name):
         """
@@ -151,14 +160,13 @@ class SchedulerServiceHandler(scheduler_service.Iface):
          - size
         """
         self._link_batch_size = size
-        links = next(self.ready_links_generator)
-        for link in links:
-            klink = pickle.dumps(link)
-            self.dead_links_db.put(klink, b'')
-            self.ready_links_db.delete(klink)
-        self.num_links -= len(links)
-        self.logger.info('%s links left' % self.num_links)
-        return links
+        ret_links = []
+        for _ in range(min(size, len(self.links))):
+            link = self.links.pop()
+            ret_links.append(link)
+            self.dead_links_db.put(pickle.dumps(link), b'')
+        self.logger.info('%s links left' % len(self.links))
+        return ret_links 
 
     def submit_links(self, links):
         """
@@ -169,14 +177,11 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         """
         count = 0
         for link in links:
-            klink = pickle.dumps(link)
-            if self.dead_links_db.get(klink) == b'' or self.ready_links_db.get(klink) == b'':
+            if link in self.links or self.dead_links_db.get(pickle.dumps(link)) == b'':
                 self.logger.debug('bypass: %s' % link)
                 continue
-            self.ready_links_db.put(klink, b'')
+            self.links.add(link)
             count += 1
-        self.logger.debug(links)
-        self.num_links += count
         self.logger.debug('Receive %s links' % count)
         return ttypes.RetStatus.SUCCESS
 
@@ -263,28 +268,6 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         return ttypes.RetStatus.SUCCESS
 
     ## Utility methods
-    def _ready_links_generator(self):
-        """
-        Return a link
-        """
-        count = 0
-        while True:
-            snapshot = self.ready_links_db.snapshot()
-            with snapshot.iterator() as it:
-                links = []
-                for k, v in it:
-                    count += 1
-                    links.append(pickle.loads(k))
-                    if count >= self._link_batch_size:
-                        yield links
-                        links = []
-                        count = 0
-                if count >= 0: # Less links
-                    yield links
-                    links = []
-                    count = 0
-            snapshot.close()
-
     def update_proxies_callback(self):
         self.logger.info('Start updating proxies...')
         ret = requests.get(SCHEDULER_CONFIG['proxy_provider'] % SCHEDULER_CONFIG['proxy_pool_size'])
@@ -346,6 +329,11 @@ class SchedulerServerDaemon(sinaspider.utils.Daemon, TServer.TServer):
                         pass
                     except Exception as e:
                         logger.exception(e)
+                        self.serverTransport.handle.shutdown(2)
+                        self.serverTransport.handle.close()
+                        itrans.close()
+                        otrans.close()
+                        break
                     itrans.close()
                     otrans.close()
             except Exception:

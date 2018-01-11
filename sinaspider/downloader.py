@@ -6,6 +6,7 @@ import aenum
 import logging
 import random
 import requests
+import socket
 import threading
 import time
 from thrift.protocol import TBinaryProtocol
@@ -50,6 +51,7 @@ class Downloader(threading.Thread):
         self.proxies = set() 
         self.transport = TSocket.TSocket(SCHEDULER_CONFIG['addr'],
                                     SCHEDULER_CONFIG['port'])
+        self.transport.setTimeout(20*1000)
         self.transport = TTransport.TBufferedTransport(
             self.transport)
         protocol = TBinaryProtocol.TBinaryProtocol(
@@ -80,7 +82,7 @@ class Downloader(threading.Thread):
                 logger.debug('Get user identity: %s' % self.user_identity)
                 self.transport.close()
                 break
-            except TTransport.TTransportException:
+            except (TTransport.TTransportException, socket.timeout) as e:
                 logger.exception(
                     'Exception while initializing, reconecting...')
                 time.sleep(interval)
@@ -108,8 +110,10 @@ class Downloader(threading.Thread):
                         break  # Exiting
                     self.pipeline.feed(response)
                     del self.links[-1]
-            except TTransport.TTransportException:
+            except (TTransport.TTransportException, socket.timeout) as e:
                 logger.exception('Connection error.')
+                if self.transport.isOpen():
+                    self.transport.close()
                 time.sleep(interval)
             except Exception:
                 logger.exception('Unkown failure, exiting...')
@@ -149,7 +153,8 @@ class Downloader(threading.Thread):
                 self.proxy_lock.acquire()
                 proxy = random.choice(self.proxies)
                 self.proxy_lock.release()
-                self.session.close()
+                if _proxy != proxy:
+                    self.session.close()
                 logger.debug('Using proxy: %s' % proxy)
                 response = self.session.get(link, proxies=proxy, 
                             timeout=DOWNLOADER_CONFIG['requests_timeout'],

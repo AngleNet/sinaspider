@@ -29,7 +29,7 @@
         "addr": "221.207.30.251",
         "port": "9123",
         "alive": true,
-        "client_failover_interval": 3,
+        "client_failover_interval": 60,
         "server_failover_interval": 3,
         "timer_interval": 1,
         "proxy_max_try": 5,
