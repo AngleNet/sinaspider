@@ -95,7 +95,10 @@ class HotWeiboLinkSeederDaemon(sinaspider.utils.Daemon):
             links = [link % patch for link in self.links]
             client.submit_links(links)
             transport.close()
-            time.sleep(self.interval)
+            passed = 0
+            while self.running and passed < self.interval:
+                time.sleep(1)
+                passed += 1
         if not transport.isOpen():
             transport.close()
  
@@ -127,7 +130,10 @@ class TopicLinkSeederDeamon(sinaspider.utils.Daemon):
                 transport.open()
             client.submit_topic_links(self.links)
             transport.close()
-            time.sleep(self.interval)
+            passed = 0
+            while self.running and passed < self.interval:
+                time.sleep(1)
+                passed += 1
         if not transport.isOpen():
             transport.close()
  

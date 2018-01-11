@@ -108,7 +108,6 @@ class Downloader(threading.Thread):
                         break  # Exiting
                     self.pipeline.feed(response)
                     del self.links[-1]
-                    time.sleep(5)
             except TTransport.TTransportException:
                 logger.exception('Connection error.')
                 time.sleep(interval)
@@ -150,8 +149,7 @@ class Downloader(threading.Thread):
                 self.proxy_lock.acquire()
                 proxy = random.choice(self.proxies)
                 self.proxy_lock.release()
-                if _proxy != proxy:
-                    self.session.close()
+                self.session.close()
                 logger.debug('Using proxy: %s' % proxy)
                 response = self.session.get(link, proxies=proxy, 
                             timeout=DOWNLOADER_CONFIG['requests_timeout'],
