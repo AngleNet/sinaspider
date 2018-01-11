@@ -112,6 +112,4 @@ A simple weibo spider which collects trending post messages with Py3.5.
 
 * `requests` hanging when accessing with proxy?
 
-    `requests` will hang unexpectly when making *https* requests using proxy. The reasons can be the following:
-
-    1.  
+    See [issue 3528](https://github.com/requests/requests/issues/3528) for details.
