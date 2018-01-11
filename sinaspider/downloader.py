@@ -3,7 +3,6 @@ A multithread downloader.
 """
 
 import aenum
-import gevent
 import logging
 import random
 import requests
@@ -151,15 +150,9 @@ class Downloader(threading.Thread):
                 proxy = random.choice(self.proxies)
                 self.proxy_lock.release()
                 logger.debug('Using proxy: %s' % proxy)
-                response = None
-                with gevent.Timeout(DOWNLOADER_CONFIG['requests_total_timeout'],
-                                    False):
-                    response = self.session.get(link, proxies=proxy, 
+                response = self.session.get(link, proxies=proxy, 
                             timeout=DOWNLOADER_CONFIG['requests_timeout'],
                             verify=False)
-                if response is None:
-                    logger.warn('Requests timeout')
-                    continue
                 _ = response.text
                 response.close()
                 if 'weibo.com/sorry?sysbusy' in response.url:

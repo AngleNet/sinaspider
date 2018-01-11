@@ -42,6 +42,7 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         self.topic_links = list()
         self.ready_links_db = None
         self.dead_links_db = None
+        self.dead_topic_links_db = None
         self._db_dir = join(dirname(dirname(abspath(__file__))), 'database')
         if not isdir(self._db_dir):
             os.makedirs(self._db_dir)
@@ -57,18 +58,23 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         for ident in SCHEDULER_CONFIG['user_identity']:
             ident = ttypes.UserIdentity(ident['name'], ident['pwd'])
             self.user_identities.add(ident)
-        self.ready_links_db = plyvel.DB(join(self._db_dir, 'ready_links.db'), create_if_missing=True)
-        self.dead_links_db = plyvel.DB(join(self._db_dir, 'dead_links.db'), create_if_missing=True)
+        self.ready_links_db = plyvel.DB(join(self._db_dir, 'ready_links.db'),
+                                        create_if_missing=True)
+        self.dead_links_db = plyvel.DB(join(self._db_dir, 'dead_links.db'),
+                                        create_if_missing=True)
         self.ready_links_generator = self._ready_links_generator()
         total_links = self.ready_links_db.get(b'total_links')
         if total_links:
             self.num_links = pickle.loads(total_links)
+        self.dead_topic_links_db = plyvel.DB(join(self._db_dir, 'dead_topic_links.db'),
+                                            create_if_missing=True)
 
     def close(self):
         with open(join(self._db_dir, 'link_numbers'), 'w+') as fd:
             fd.write('%s\n' % self.num_links)
         self.ready_links_db.close()
         self.dead_links_db.close()
+        self.dead_topic_links_db.close()
 
     def register_downloader(self, name):
         """
@@ -196,8 +202,14 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         Parameters:
          - links
         """
-        self.topic_links.extend(links)
-        self.logger.debug('Receive %s topic links' % len(links))
+        _links = []
+        for link in links:
+            if 'p/100808' in link and \
+                self.dead_topic_links_db.get(pickle.dumps(link)) == b'':
+                continue
+            _links.append(link)
+        self.topic_links.extend(_links)
+        self.logger.debug('Receive %s topic links' % len(_links))
         return ttypes.RetStatus.SUCCESS
  
     def request_proxies(self, name, size):

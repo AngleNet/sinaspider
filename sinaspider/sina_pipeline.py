@@ -40,6 +40,7 @@ _USER_HOME_LINK = {
 _TWEET_LONGTEXT_LINK = 'https://weibo.com/p/aj/mblog/getlongtext?ajwvr=6&mid=%s&tweet=%s'
 _TOPIC_PAGE_LINK =  'https://d.weibo.com/100803?pids=Pl_Discover_Pt6Rank__5&cfs=920'\
                     '&Pl_Discover_Pt6Rank__5_filter=hothtlist_type=1&Pl_Discover_Pt6Rank__5_page=%s'
+_TOPIC_LINK = 'https://weibo.com/p/%s?from=faxian_huati'
 
 
 ### Data Structures
@@ -112,8 +113,18 @@ class SinaTopic(Serializable):
         self.name = ''
         self.labels = ''
         self.location = ''
-        self.timestamp = 0 
 
+    def __repr__(self):
+        L = ['%s=%s' % (key, value)
+            for key, value in self.__dict__.items()]
+        return '%s(%s)' % (self.__class__.__name__, ', '.join(L))
+
+class SinaTopicReads(Serializable):
+    def __init__(self):
+        self.tid = ''
+        self.timestamp = 0
+        self.num_reads = 0
+    
     def __repr__(self):
         L = ['%s=%s' % (key, value)
             for key, value in self.__dict__.items()]
@@ -169,7 +180,7 @@ class SinaPipeline(Pipeline):
              |  R  +--+  \
              |     ++  \  \----->UserHomePageProcessor
              |     | \  \
-             |     |  \  \------>TrendingTopicPageProcessor
+             |     |  \  \------>TrendingTopicPageProcessor--->LevelDBWriter
              +-----+   \
                         \-------->TrendingTopicPageProcessor--->LevelDBWriter
 
@@ -193,6 +204,7 @@ class SinaPipeline(Pipeline):
         ptopic = TrendingTopicProcessor()
         ptopic.forward(wtlevdb)
         pptopic = TrendingTopicPageProcessor()
+        pptopic.forward(wtlevdb)
         router.forward(pltextweibo)
         router.forward(ptrweibo)
         router.forward(prelist)
@@ -534,13 +546,19 @@ class TrendingTopicPageProcessor(PipelineNode):
         response = response.response
         logger = logging.getLogger(self.name)
         logger.debug('Get response: %s' % debug_str_response(response))
+        topics = list()
         try:
             content = decode_response_text(response)
             content = strip_text_wight_blank(content)
-            links = topic_page_parser(content)
+            topics = topic_page_parser(content)
+            links = set()
+            for topic in topics:
+                link = _TOPIC_LINK % topic.tid
+                links.add(link)
             client.submit_links(links, DownloaderType.TOPIC_DOWNLOADER)
         except Exception:
             logger.exception('Exception while handling %s' % debug_str_response(response))
+        return (topics, )
 
 class TrendingTopicProcessor(PipelineNode):
     def __init__(self):
@@ -574,7 +592,8 @@ class LevelDBWriter(PipelineNode):
             'SinaTweet': 'tweets.db',
             'SinaUser': 'users.db',
             'SinaFlow': 'flows.db',
-            'SinaTopic': 'topics.db'
+            'SinaTopic': 'topics.db',
+            'SinaTopicReads': 'topics.db'
         }
     
     def run(self, client, *kws):
@@ -583,7 +602,7 @@ class LevelDBWriter(PipelineNode):
         logger = logging.getLogger(self.name)
         db = None
         for entries in kws:
-            if not entries:
+            if entries is None or len(entries) == 0:
                 continue
             for _ in range(PIPELINE_CONFIG['leveldb_max_retries']):
                 try:
@@ -605,9 +624,13 @@ class LevelDBWriter(PipelineNode):
                         for entry in entries:
                             wb.put(pickle.dumps(entry.tid), entry.serialize())
                     elif type(entry) is SinaTopic:
-                        wb.put(pickle.dumps((entry.timestamp, entry.tid)), entry.serialize())
+                        wb.put(pickle.dumps(('topic'+entry.tid)), entry.serialize())
                         for entry in entries:
-                            wb.put(pickle.dumps((entry.timestamp, entry.tid)), entry.serialize())
+                            wb.put(pickle.dumps(('topic'+entry.tid)), entry.serialize())
+                    elif type(entry) is SinaTopicReads:
+                        wb.put(pickle.dumps('reads%s%s' % (entry.timestamp, entry.tid)), entry.serialize())
+                        for entry in entries:
+                            wb.put(pickle.dumps('reads%s%s' % (entry.timestamp, entry.tid)), entry.serialize())
                     wb.write()
                     db.close()
                     break
@@ -980,7 +1003,9 @@ def topic_page_parser(html):
     """
     Return a list of links of topics.
     """
-    links = set()
+    pidx = re.compile('.*/(.*)\?.*')
+    timestamp = round(time.time())
+    topics = list()
     topics_box = ''
     for script in BeautifulSoup(html, 'lxml').find_all('script'):
         if '"domid":"Pl_Discover_Pt6Rank__5"' in str(script):
@@ -988,10 +1013,21 @@ def topic_page_parser(html):
             break
     topics_box = extract_html_from_script(topics_box)
     topics_box = BeautifulSoup(topics_box, 'lxml')
-    for topic_box in topics_box.find_all('div', 'pic_box'):
-        link = 'https:%s' % topic_box.a.attrs['href']
-        links.add(link)
-    return links
+    for topic_box in topics_box.find_all('div', 'pic_txt'):
+        topic = SinaTopicReads()
+        topic.timestamp = timestamp
+        link_box = topic_box.find('div', 'pic_box')
+        if link_box:
+            m = pidx.match(link_box.a.attrs['href'])
+            if m:
+                topic.tid = m.groups()[0]
+        if topic.tid == '':
+            break
+        for box in topic_box.find_all('div', 'sub_box'):
+            if '阅读数' in box.get_text():
+                topic.num_reads = wordsToNum(box.span.span.get_text())
+        topics.append(topic)
+    return topics
 
 def topic_parser(html, topic):
     soup = BeautifulSoup(html, 'lxml')
@@ -1001,7 +1037,6 @@ def topic_parser(html, topic):
     config_box = ''
     number_box = ''
     lable_box = ''
-    topic.timestamp = round(time.time())
     for script in soup.find_all('script'):
         if "$CONFIG['page_id']" in str(script):
             config_box = script.contents[0]

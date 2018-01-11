@@ -109,3 +109,9 @@ A simple weibo spider which collects trending post messages with Py3.5.
     proxybroker serve --host 127.0.0.1 --port 8888 --types HTTP HTTPS --lvl High
     export HTTP_PROXY=http://127.0.0.1:8888
     export HTTPS_PROXY=https://127.0.0.1:8888
+
+* `requests` hanging when accessing with proxy?
+
+    `requests` will hang unexpectly when making *https* requests using proxy. The reasons can be the following:
+
+    1.  
