@@ -106,8 +106,10 @@ class Downloader(threading.Thread):
                     link = self.links[-1]
                     logger.debug('Downloading %s.' % link)
                     response = self._download(link)
+                    if not self.downloading:
+                        break
                     if not response:
-                        break  # Exiting
+                        continue
                     self.pipeline.feed(response)
                     del self.links[-1]
             except (TTransport.TTransportException, socket.timeout) as e:
@@ -175,9 +177,12 @@ class Downloader(threading.Thread):
                     # BadStatusLine aborts the connection
                     requests.exceptions.ConnectionError) as e:
                 logger.warn('requests exception: %s' % e)
+            except requests.exceptions.MissingSchema as e:
+                break
             except Exception:
                 logger.exception('Exception in downloading %s' % link)
-        return None  # Exiting
+        return None
+            
 
     def _is_login(self, response):
         """
