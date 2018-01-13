@@ -23,7 +23,8 @@
         "engine_pool_size": 2,
         "user_tweets_date": 201801,
         "leveldb_max_retries": 3,
-        "leveldb_retry_delay": 3
+        "leveldb_retry_delay": 3,
+        "link_max_retries": 3
     },
     "SCHEDULER_SERVICE":{
         "addr": "221.207.30.251",

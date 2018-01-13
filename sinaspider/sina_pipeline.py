@@ -433,6 +433,7 @@ class UserWeiboProcessor(PipelineNode):
         cnt_page = int(dic_query['page'][0])
         domain_op = int(dic_query['domain_op'][0])
         page_bar = int(dic_query.get('pagebar', ['-1'])[0])
+        tries = int(dic_query.get('_tries', ['1'])[0])
 
         tweets = []
         flows = []
@@ -441,10 +442,13 @@ class UserWeiboProcessor(PipelineNode):
             links = set()
             content_json = decode_response_text(response)
             assert type(content_json) == type(dict())
-            if content_json['code'] != '100000':
+            if content_json['code'] != '100000' or content_json['data'].strip() == '':
                 logger.debug('%s failed.' % response.url)
-                client.submit_links(response.url)
-                return # Failed, need retry.
+                if tries < PIPELINE_CONFIG['link_max_retries']:
+                    tries += 1
+                    link = '%s&_tries=%s' % (response.url, tries)
+                    client.submit_links([link])
+                return 
             content = strip_text_wight_blank(content_json['data'])
             paging_info = False
             if cnt_page == 1 and page_bar == 1:
@@ -494,6 +498,7 @@ class LongTextWeiboProcessor(PipelineNode):
         res_parse = urllib.parse.urlparse(response.url)
         dict_query = urllib.parse.parse_qs(res_parse.query)
         tweet = dict_query.get('tweet', [''])[0]
+        tries = int(dict_query.get('_tries', ['1'])[0])
         if tweet:
             tweet = json.loads(urllib.parse.unquote(tweet))
             _tweet = SinaTweet()
@@ -503,9 +508,12 @@ class LongTextWeiboProcessor(PipelineNode):
             try:
                 content_json = decode_response_text(response)
                 assert type(content_json) == dict
-                if content_json['code'] != '100000':
+                if content_json['code'] != '100000' or content_json['data']['html'].strip() == '':
                     logger.debug('%s failed.' % response.url)
-                    client.submit_links(response.url)
+                    if tries < PIPELINE_CONFIG['link_max_retries']:
+                        tries += 1
+                        link = '%s&_tries=%s' % (response.url, tries)
+                        client.submit_links([link])
                     return # Failed, need retry.
                 content = strip_text_wight_blank(content_json['data']['html'])
                 box = BeautifulSoup(content, 'lxml')
