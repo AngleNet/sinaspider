@@ -613,9 +613,10 @@ class LevelDBWriter(PipelineNode):
             return
         logger = logging.getLogger(self.name)
         db = None
-        for entries in kws:
-            if entries is None or len(entries) == 0:
+        for _entries in kws:
+            if _entries is None or len(_entries) == 0:
                 continue
+            entries = _entries
             for _ in range(PIPELINE_CONFIG['leveldb_max_retries']):
                 try:
                     logger.debug('Writing: %s' % entries)
