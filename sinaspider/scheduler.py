@@ -318,6 +318,7 @@ class SchedulerServerDaemon(sinaspider.utils.Daemon, TServer.TServer):
                     client = self.serverTransport.accept()
                     if not client:
                         continue
+                    client.handle.settimeout(20)
                     itrans = self.inputTransportFactory.getTransport(client)
                     otrans = self.outputTransportFactory.getTransport(client)
                     iprot = self.inputProtocolFactory.getProtocol(itrans)

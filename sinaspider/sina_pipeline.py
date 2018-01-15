@@ -899,6 +899,8 @@ def tweet_box_parser(box, tweet):
                     bypass = True
                     path.append(inner.get_text()[1:])
                     continue
+            elif 'widget_photoview' in __type:
+                continue
             elif 'feed_list_url' in __type and not bypass:
                 if '视频' in inner.get_text():
                     tweet.num_videos += 1
@@ -907,7 +909,7 @@ def tweet_box_parser(box, tweet):
                 tweet.content += inner.get_text()
             elif 'fl_unfold' in __type and not bypass:
                 is_long_text = True
-            else:
+            elif not bypass:
                 logger = logging.getLogger()
                 logger.warn('Missed tweet text: %s' % inner)
         elif inner.name is None and not bypass:

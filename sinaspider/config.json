@@ -14,7 +14,7 @@
     },
     "LOGGER":{
         "use_terminal": true,
-        "level": "DEBUG",
+        "level": "INFO",
         "format": "[%(levelname)s]: %(asctime)s: %(filename)s:%(lineno)d %(name)s(%(processName)s): %(message)s",
         "datefmt": "%m-%d %H:%M:%S",
         "backup_window": 7
