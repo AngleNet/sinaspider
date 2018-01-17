@@ -92,7 +92,7 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         Parameters:
          - name
         """
-        self.logger.debug('Register %s' % name)
+        self.logger.info('Register %s' % name)
         if name not in self.downloaders:
             self.downloaders[name] = dict(user_identity=None)
         else:
@@ -106,7 +106,7 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         Parameters:
          - name
         """
-        self.logger.debug('Unregister downloader %s' % name)
+        self.logger.info('Unregister downloader %s' % name)
         if name not in self.downloaders:
             self.logger.warn('Unregister a never registered downloader: %s' % name)
             return ttypes.RetStatus.FAILED
@@ -133,7 +133,7 @@ class SchedulerServiceHandler(scheduler_service.Iface):
                 self.user_identities.add(ident)
         ident = self.user_identities.pop() 
         self.downloaders[name]['user_identity'] = ident
-        self.logger.debug('Allocate %s for %s' % (ident, name))
+        self.logger.info('Allocate %s for %s' % (ident, name))
         return ident 
 
     def resign_user_identity(self, pair, name):
@@ -148,7 +148,7 @@ class SchedulerServiceHandler(scheduler_service.Iface):
             self.logger.warn('%s try to resign %s not owned by itself.' % (name, pair))
             return ttypes.RetStatus.FAILED
         self.user_identities.add(pair)
-        self.logger.debug('%s renounces %s' % (name, pair))
+        self.logger.info('%s renounces %s' % (name, pair))
         return ttypes.RetStatus.SUCCESS
 
     def grab_links(self, size):
@@ -182,7 +182,7 @@ class SchedulerServiceHandler(scheduler_service.Iface):
                 continue
             self.links.add(link)
             count += 1
-        self.logger.debug('Receive %s links' % count)
+        self.logger.info('Receive %s links' % count)
         return ttypes.RetStatus.SUCCESS
 
     def grab_topic_links(self, size):
@@ -197,7 +197,7 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         for _ in range(min(size, len(self.topic_links))):
             link = self.topic_links.pop(0)
             ret_links.append(link)
-        self.logger.debug('%s topic links left.' % len(self.topic_links))
+        self.logger.info('%s topic links left.' % len(self.topic_links))
         return ret_links
 
     def submit_topic_links(self, links):
@@ -214,7 +214,7 @@ class SchedulerServiceHandler(scheduler_service.Iface):
                 continue
             _links.append(link)
         self.topic_links.extend(_links)
-        self.logger.debug('Receive %s topic links' % len(_links))
+        self.logger.info('Receive %s topic links' % len(_links))
         return ttypes.RetStatus.SUCCESS
  
     def request_proxies(self, name, size):
@@ -250,7 +250,7 @@ class SchedulerServiceHandler(scheduler_service.Iface):
         if len(self.idle_cookies) == 0:
             return ttypes.Cookie('NULL', '')
         cookie = self.idle_cookies.pop()
-        self.logger.debug('Allocate %s for %s' % (cookie, name))
+        self.logger.info('Allocate %s for %s' % (cookie, name))
         return cookie
 
     def submit_cookies(self, cookies):
@@ -276,7 +276,7 @@ class SchedulerServiceHandler(scheduler_service.Iface):
             addr, port = entry.split(':')
             proxy = ttypes.ProxyAddress(addr, int(port))
             new_proxies.add(proxy)
-        self.logger.debug('Number of new proxies: %s' % len(new_proxies))
+        self.logger.info('Number of new proxies: %s' % len(new_proxies))
         self.proxies = new_proxies
 
 class SchedulerServerDaemon(sinaspider.utils.Daemon, TServer.TServer):
