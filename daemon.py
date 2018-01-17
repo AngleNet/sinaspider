@@ -81,6 +81,8 @@ class HotWeiboLinkSeederDaemon(sinaspider.utils.Daemon):
     def run(self):
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
+        sinaspider.log.configure_logger('.weibo_seeder.log')
+        logger = logging.getLogger(self.name)
         addr = sinaspider.config.SCHEDULER_CONFIG['addr']
         port = sinaspider.config.SCHEDULER_CONFIG['port']
         transport = thrift.transport.TSocket.TSocket(addr, port)
@@ -89,16 +91,20 @@ class HotWeiboLinkSeederDaemon(sinaspider.utils.Daemon):
         client = sinaspider.services.scheduler_service.Client(protocol)
         self.running = True
         while self.running:
-            if not transport.isOpen():
-                transport.open()
-            patch = uuid.uuid4().hex
-            links = [link % patch for link in self.links]
-            client.submit_links(links)
-            transport.close()
-            passed = 0
-            while self.running and passed < self.interval:
-                time.sleep(1)
-                passed += 1
+            try:
+                if not transport.isOpen():
+                    transport.open()
+                patch = uuid.uuid4().hex
+                links = [link % patch for link in self.links]
+                client.submit_links(links)
+                transport.close()
+                logger.info('Submit links: %s' % self.links)
+                passed = 0
+                while self.running and passed < self.interval:
+                    time.sleep(1)
+                    passed += 1
+            except Exception:
+                pass
         if not transport.isOpen():
             transport.close()
  
@@ -118,6 +124,8 @@ class TopicLinkSeederDeamon(sinaspider.utils.Daemon):
     def run(self):
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
+        sinaspider.log.configure_logger('.topic_seeder.log')
+        logger = logging.getLogger(self.name)
         addr = sinaspider.config.SCHEDULER_CONFIG['addr']
         port = sinaspider.config.SCHEDULER_CONFIG['port']
         transport = thrift.transport.TSocket.TSocket(addr, port)
@@ -126,14 +134,18 @@ class TopicLinkSeederDeamon(sinaspider.utils.Daemon):
         client = sinaspider.services.scheduler_service.Client(protocol)
         self.running = True
         while self.running:
-            if not transport.isOpen():
-                transport.open()
-            client.submit_topic_links(self.links)
-            transport.close()
-            passed = 0
-            while self.running and passed < self.interval:
-                time.sleep(1)
-                passed += 1
+            try:
+                if not transport.isOpen():
+                    transport.open()
+                client.submit_topic_links(self.links)
+                transport.close()
+                logger.info('Submit links: %s' % self.links)
+                passed = 0
+                while self.running and passed < self.interval:
+                    time.sleep(1)
+                    passed += 1
+            except Exception:
+                pass
         if not transport.isOpen():
             transport.close()
  
