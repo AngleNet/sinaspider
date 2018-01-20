@@ -76,6 +76,11 @@ class HotWeiboLinkSeederDaemon(sinaspider.utils.Daemon):
             self, pid_file, self.__class__.__name__)
         self.links = []
         self.links.append(sinaspider.sina_pipeline._TRENDING_TWEETS_LINK + '&uuid=%s')
+        for i in range(1, 21):
+            link = sinaspider.sina_pipeline._HOT_WEIBO_RANK_HOURLY % (i-1, i)
+            self.links.append(link + '&uuid=%s')
+            link = sinaspider.sina_pipeline._HOT_WEIBO_RANK_DAYLY % (i-1, i)
+            self.links.append(link + '&uuid=%s')
         self.running = True 
         self.interval = sinaspider.config.SCHEDULER_CONFIG['hot_weibo_link_seeder_interval']
     def run(self):

@@ -49,7 +49,7 @@
             },
             {
                 "name": "atropos_spider4@sina.com",
-                "pwd": "passward"
+                "pwd": "passwardme"
             },
             {
                 "name": "atropos_spider5@sina.com",
@@ -100,7 +100,7 @@
        "proxy_pool_size": 1000,
        "proxy_interval": 60,
        "topic_link_seeder_interval": 3600,
-       "hot_weibo_link_seeder_interval": 1800 
+       "hot_weibo_link_seeder_interval": 60 
     },
     "TEST":{
         "_comment": "Unit testing configures",

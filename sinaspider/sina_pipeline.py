@@ -32,6 +32,18 @@ _TRENDING_TWEETS_LINK = 'https://d.weibo.com/p/aj/v6/mblog/mbloglist?ajwvr=6'\
                         '&current_page=1&pre_page=1&page=1&pl_name=Pl_Core_NewMixFeed__3'\
                         '&id=102803_ctg1_1760_-_ctg1_1760&script_uri=/&feed_type=1'\
                         '&domain_op=102803_ctg1_1760_-_ctg1_1760'    # Scheduler seed.
+_HOT_WEIBO_RANK_DAYLY = 'https://d.weibo.com/p/aj/v6/mblog/mbloglist?ajwvr=6'\
+                '&domain=102803&feed_sort=102803_ctg1_99991_-_ctg1_99991'\
+                '&feed_filter=102803_ctg1_99991_-_ctg1_99991&pagebar=%s'\
+                '&tab=home&current_page=%s&pre_page=1&page=1'\
+                '&pl_name=Pl_Core_NewMixFeed__3&id=102803&feed_type=1'\
+                '&domain_op=102803'
+_HOT_WEIBO_RANK_HOURLY = 'https://d.weibo.com/p/aj/v6/mblog/mbloglist?ajwvr=6'\
+                '&domain=102803&feed_sort=102803_ctg1_9999_-_ctg1_9999'\
+                '&feed_filter=102803_ctg1_9999_-_ctg1_9999&pagebar=%s&tab=home'\
+                '&current_page=%s&pre_page=1&page=1&pl_name=Pl_Core_NewMixFeed__3'\
+                '&id=102803&feed_type=1&domain_op=102803'
+
 _RETWEET_LINKS = 'https://www.weibo.com/aj/v6/mblog/info/big?ajwvr=6&id=%s&page=%s&ouid=%s'
 _USER_HOME_LINK = {
     'id': 'https://www.weibo.com/u/%s',
