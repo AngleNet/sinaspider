@@ -16,7 +16,7 @@ MarkupSafe==1.0
 pipreqs==0.4.9
 pluggy==0.6.0
 plyvel==0.9
-py==1.5.2
+py==1.10.0
 pyasn1==0.4.2
 PyMySQL==0.6.7
 pytest==3.3.0
